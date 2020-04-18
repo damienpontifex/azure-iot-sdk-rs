@@ -1,0 +1,3 @@
+hostname = "<Hub Name>.azure-devices.net"
+device_id = "<Your Device Id>"
+shared_access_key = "<Primary Key>"
