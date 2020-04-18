@@ -314,7 +314,7 @@ where
             QualityOfService::Level0,
         ),
         (
-            TopicFilter::new("$iothub/twin/PATCH/properties/desired/").unwrap(),
+            TopicFilter::new("$iothub/twin/PATCH/properties/desired/#").unwrap(),
             QualityOfService::Level0,
         ),
     ];
@@ -380,7 +380,7 @@ where
                         }
                     }
                     sender.send(MessageType::C2DMessage(message)).await.unwrap();
-                } else if publ.topic_name().starts_with("$iothub/twin/res/") {
+                } else if publ.topic_name().starts_with("$iothub/twin/") {
                     sender
                         .send(MessageType::DesiredPropertyUpdate(message))
                         .await
