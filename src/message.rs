@@ -32,6 +32,7 @@ pub enum SendType {
     Message(Message),
     Ping,
     RespondToDirectMethod(DirectMethodResponse),
+    RequestTwinProperties(String),
 }
 
 // System properties that are user settable
@@ -63,6 +64,12 @@ impl Message {
 
     pub fn builder() -> MessageBuilder {
         MessageBuilder::default()
+    }
+}
+
+impl std::convert::Into<serde_json::Value> for Message {
+    fn into(self) -> serde_json::Value {
+        serde_json::from_str(&self.body).unwrap()
     }
 }
 

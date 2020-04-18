@@ -99,7 +99,7 @@ impl IoTHubClient {
 
         subscribe(&mut write_socket, &device_id).await;
 
-        let (d2c_sender, d2c_receiver) = channel::<SendType>(100);
+        let (mut d2c_sender, d2c_receiver) = channel::<SendType>(100);
         tokio::spawn(create_sender(
             write_socket,
             device_id.to_owned(),
@@ -110,6 +110,12 @@ impl IoTHubClient {
 
         let (tx, rx) = channel::<MessageType>(100);
         tokio::spawn(receive(read_socket, device_id.to_owned(), tx));
+
+        // Send empty message so hub will respond with device twin data
+        d2c_sender
+            .send(SendType::RequestTwinProperties("0".into()))
+            .await
+            .unwrap();
 
         IoTHubClient {
             device_id,
@@ -272,6 +278,20 @@ where
                 publish_packet.encode(&mut buf).unwrap();
                 write_socket.write_all(&buf[..]).await.unwrap();
             }
+            SendType::RequestTwinProperties(request_id) => {
+                trace!(
+                    "Requesting device twin properties with rid = {}",
+                    request_id
+                );
+                let packet = PublishPacket::new(
+                    TopicName::new(format!("$iothub/twin/GET/?$rid={}", request_id)).unwrap(),
+                    QoSWithPacketIdentifier::Level0,
+                    "".as_bytes(),
+                );
+                let mut buf = vec![];
+                packet.encode(&mut buf).unwrap();
+                write_socket.write_all(&buf[..]).await.unwrap();
+            }
         }
     }
 }
@@ -280,26 +300,25 @@ async fn subscribe<S>(write_socket: &mut S, device_id: &str)
 where
     S: AsyncWriteExt + Unpin,
 {
-    let cloud_to_device_topic = (
-        TopicFilter::new(format!("{}#", receive_topic_prefix(device_id))).unwrap(),
-        QualityOfService::Level0,
-    );
-    let direct_method_topic = (
-        TopicFilter::new("$iothub/methods/POST/#").unwrap(),
-        QualityOfService::Level0,
-    );
-    let device_twin_properties = (
-        TopicFilter::new("$iothub/twin/res/#").unwrap(),
-        QualityOfService::Level0,
-    );
-    let subscribe_packet = SubscribePacket::new(
-        10,
-        vec![
-            cloud_to_device_topic,
-            direct_method_topic,
-            device_twin_properties,
-        ],
-    );
+    let topics = vec![
+        (
+            TopicFilter::new(format!("{}#", receive_topic_prefix(device_id))).unwrap(),
+            QualityOfService::Level0,
+        ),
+        (
+            TopicFilter::new("$iothub/methods/POST/#").unwrap(),
+            QualityOfService::Level0,
+        ),
+        (
+            TopicFilter::new("$iothub/twin/res/#").unwrap(),
+            QualityOfService::Level0,
+        ),
+        (
+            TopicFilter::new("$iothub/twin/PATCH/properties/desired/#").unwrap(),
+            QualityOfService::Level0,
+        ),
+    ];
+    let subscribe_packet = SubscribePacket::new(10, topics);
     let mut buf = Vec::new();
     subscribe_packet.encode(&mut buf).unwrap();
     write_socket.write_all(&buf[..]).await.unwrap();
@@ -361,7 +380,7 @@ where
                         }
                     }
                     sender.send(MessageType::C2DMessage(message)).await.unwrap();
-                } else if publ.topic_name().starts_with("$iothub/twin/res/") {
+                } else if publ.topic_name().starts_with("$iothub/twin/") {
                     sender
                         .send(MessageType::DesiredPropertyUpdate(message))
                         .await
