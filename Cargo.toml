@@ -8,6 +8,7 @@ documentation = "https://docs.rs/azure_iot_sdk"
 description = "Client library for connection devices to Azure IoT Hub"
 keywords = ["iot", "azure"]
 license = "MIT"
+readme = "README.md"
 
 [dependencies]
 native-tls = "0.2.4"
