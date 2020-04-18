@@ -3,7 +3,7 @@ extern crate log;
 
 use azure_iot_sdk::{
     client::IoTHubClient,
-    message::{Message, MessageType},
+    message::{DirectMethodResponse, Message, MessageType, SendType},
 };
 
 use tokio::time;
@@ -65,12 +65,20 @@ async fn main() {
     info!("Initialized client");
 
     let mut rx = client.get_receiver();
+    let mut tx = client.sender();
     let receiver = async move {
         while let Some(msg) = rx.recv().await {
             match msg {
                 MessageType::C2DMessage(message) => info!("Received message {:?}", message),
                 MessageType::DirectMethod(direct_method) => {
-                    info!("Received direct method {:?}", direct_method)
+                    info!("Received direct method {:?}", direct_method);
+                    tx.send(SendType::RespondToDirectMethod(DirectMethodResponse::new(
+                        direct_method.request_id,
+                        0,
+                        Some("{'responseKey': 1}".into()),
+                    )))
+                    .await
+                    .unwrap();
                 }
                 _ => info!("Recieved other message type"),
             }

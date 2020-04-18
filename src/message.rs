@@ -9,11 +9,29 @@ pub enum MessageType {
     DirectMethod(DirectMethodInvokation),
 }
 
+#[derive(Debug)]
+pub struct DirectMethodResponse {
+    pub(crate) status: i32,
+    pub(crate) request_id: String,
+    pub(crate) body: String,
+}
+
+impl DirectMethodResponse {
+    pub fn new(request_id: String, status: i32, body: Option<String>) -> Self {
+        DirectMethodResponse {
+            status,
+            request_id,
+            body: body.unwrap_or_default(),
+        }
+    }
+}
+
 /// The type of message to send for device to cloud communication
 #[derive(Debug)]
 pub enum SendType {
     Message(Message),
     Ping,
+    RespondToDirectMethod(DirectMethodResponse),
 }
 
 // System properties that are user settable
@@ -23,9 +41,9 @@ const MESSAGE_ID: &str = "message-id";
 /// Message used in body of communication
 #[derive(Default, Debug)]
 pub struct Message {
-    pub body: String,
-    pub properties: HashMap<String, String>,
-    pub system_properties: HashMap<String, String>,
+    pub(crate) body: String,
+    pub(crate) properties: HashMap<String, String>,
+    pub(crate) system_properties: HashMap<String, String>,
 }
 
 impl Message {
