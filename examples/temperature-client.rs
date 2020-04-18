@@ -80,7 +80,10 @@ async fn main() {
                     .await
                     .unwrap();
                 }
-                _ => info!("Recieved other message type"),
+                MessageType::DesiredPropertyUpdate(property_update) => {
+                    let json: serde_json::Value = property_update.into();
+                    info!("Received property update {:?}", json);
+                }
             }
         }
     };
