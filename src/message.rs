@@ -9,11 +9,29 @@ pub enum MessageType {
     DirectMethod(DirectMethodInvokation),
 }
 
+#[derive(Debug)]
+pub struct DirectMethodResponse {
+    pub status: i32,
+    pub request_id: String,
+    pub body: String,
+}
+
+impl DirectMethodResponse {
+    pub fn new(request_id: String, status: i32, body: Option<String>) -> Self {
+        DirectMethodResponse {
+            status,
+            request_id,
+            body: body.unwrap_or_default(),
+        }
+    }
+}
+
 /// The type of message to send for device to cloud communication
 #[derive(Debug)]
 pub enum SendType {
     Message(Message),
     Ping,
+    RespondToDirectMethod(DirectMethodResponse),
 }
 
 // System properties that are user settable

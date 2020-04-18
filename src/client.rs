@@ -122,6 +122,10 @@ impl IoTHubClient {
             .unwrap();
     }
 
+    pub fn sender(&mut self) -> Sender<SendType> {
+        self.d2c_sender.clone()
+    }
+
     pub fn get_receiver(&mut self) -> Receiver<MessageType> {
         std::mem::replace(&mut self.c2d_receiver, None).unwrap()
     }
@@ -222,32 +226,48 @@ pub async fn create_sender<S>(
 ) where
     S: AsyncWriteExt + Unpin,
 {
-    loop {
-        while let Some(sent) = receiver.recv().await {
-            match sent {
-                SendType::Message(message) => {
-                    let send_topic =
-                        TopicName::new(format!("devices/{}/messages/events/", device_id)).unwrap();
-                    // TODO: Append properties and system properties to topic path
-                    let publish_packet = PublishPacket::new(
-                        send_topic,
-                        QoSWithPacketIdentifier::Level0,
-                        message.body.clone(),
-                    );
-                    let mut buf = Vec::new();
-                    publish_packet.encode(&mut buf).unwrap();
-                    write_socket.write_all(&buf[..]).await.unwrap();
-                    trace!("Sent message {:?}", message);
-                }
-                SendType::Ping => {
-                    info!("Sending PINGREQ to broker");
+    let send_topic = TopicName::new(format!("devices/{}/messages/events/", device_id)).unwrap();
+    while let Some(sent) = receiver.recv().await {
+        match sent {
+            SendType::Message(message) => {
+                // TODO: Append properties and system properties to topic path
+                trace!("Sending message {:?}", message);
+                let publish_packet = PublishPacket::new(
+                    send_topic.clone(),
+                    QoSWithPacketIdentifier::Level0,
+                    message.body,
+                );
+                let mut buf = Vec::new();
+                publish_packet.encode(&mut buf).unwrap();
+                write_socket.write_all(&buf[..]).await.unwrap();
+            }
+            SendType::Ping => {
+                info!("Sending PINGREQ to broker");
 
-                    let pingreq_packet = PingreqPacket::new();
+                let pingreq_packet = PingreqPacket::new();
 
-                    let mut buf = Vec::new();
-                    pingreq_packet.encode(&mut buf).unwrap();
-                    write_socket.write_all(&buf).await.unwrap();
-                }
+                let mut buf = Vec::new();
+                pingreq_packet.encode(&mut buf).unwrap();
+                write_socket.write_all(&buf).await.unwrap();
+            }
+            SendType::RespondToDirectMethod(response) => {
+                // TODO: Append properties and system properties to topic path
+                trace!(
+                    "Responding to direct method with rid = {}",
+                    response.request_id
+                );
+                let publish_packet = PublishPacket::new(
+                    TopicName::new(format!(
+                        "$iothub/methods/res/{}/?$rid={}",
+                        response.status, response.request_id
+                    ))
+                    .unwrap(),
+                    QoSWithPacketIdentifier::Level0,
+                    response.body,
+                );
+                let mut buf = Vec::new();
+                publish_packet.encode(&mut buf).unwrap();
+                write_socket.write_all(&buf[..]).await.unwrap();
             }
         }
     }
