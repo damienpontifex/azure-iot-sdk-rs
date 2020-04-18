@@ -58,6 +58,7 @@ fn generate_sas(hub: &str, device_id: &str, key: &str, expiry_timestamp: i64) ->
 }
 
 impl IoTHubClient {
+    /// Create a new IoT Hub device client using the device's primary key
     pub async fn with_device_key(hub: String, device_id: String, key: String) -> Self {
         let expiry = Utc::now() + Duration::days(1);
         let expiry = expiry.timestamp();
@@ -67,6 +68,7 @@ impl IoTHubClient {
         Self::new(hub, device_id, sas).await
     }
 
+    /// Create a new IoT Hub device client using the device's connection string
     pub async fn from_connection_string(connection_string: &str) -> Self {
         let mut key = None;
         let mut device_id = None;
@@ -90,6 +92,7 @@ impl IoTHubClient {
         Self::with_device_key(hub.unwrap(), device_id.unwrap(), key.unwrap()).await
     }
 
+    /// Create a new IoT Hub device client using a shared access signature
     pub async fn new(hub_name: String, device_id: String, sas: String) -> Self {
         let (read_socket, mut write_socket) =
             connect(hub_name.to_owned(), device_id.to_owned(), sas.to_owned()).await;
@@ -115,6 +118,7 @@ impl IoTHubClient {
         }
     }
 
+    /// Send a device to cloud message for this device to the IoT Hub
     pub async fn send_message(&mut self, message: Message) {
         self.d2c_sender
             .send(SendType::Message(message))
@@ -122,6 +126,8 @@ impl IoTHubClient {
             .unwrap();
     }
 
+    /// Gets a new Sender channel that is paired with the hub device to
+    /// cloud send functionality
     pub fn sender(&mut self) -> Sender<SendType> {
         self.d2c_sender.clone()
     }
@@ -152,7 +158,7 @@ async fn ping(interval: u16, mut sender: Sender<SendType>) {
 /// ```
 /// // let (read_socket, write_socket) = client::connect("myiothub".to_string(), "myfirstdevice".to_string(), "SharedAccessSignature sr=myiothub.azure-devices.net%2Fdevices%2Fmyfirstdevice&sig=blahblah&se=1586909077".to_string()).await;
 /// ```
-pub async fn connect(
+async fn connect(
     iot_hub: String,
     device_id: String,
     sas: String,
@@ -219,11 +225,8 @@ fn receive_topic_prefix(device_id: &str) -> String {
 /// * `write_socket` -
 /// * `device_id` -
 /// * `receiver` -
-pub async fn create_sender<S>(
-    mut write_socket: S,
-    device_id: String,
-    mut receiver: Receiver<SendType>,
-) where
+async fn create_sender<S>(mut write_socket: S, device_id: String, mut receiver: Receiver<SendType>)
+where
     S: AsyncWriteExt + Unpin,
 {
     let send_topic = TopicName::new(format!("devices/{}/messages/events/", device_id)).unwrap();
@@ -273,7 +276,7 @@ pub async fn create_sender<S>(
     }
 }
 
-pub async fn subscribe<S>(write_socket: &mut S, device_id: &str)
+async fn subscribe<S>(write_socket: &mut S, device_id: &str)
 where
     S: AsyncWriteExt + Unpin,
 {
@@ -309,7 +312,7 @@ where
 /// * `read_socket` -
 /// * `device_id` -
 /// * `sender` -
-pub async fn receive<S>(mut read_socket: S, device_id: String, mut sender: Sender<MessageType>)
+async fn receive<S>(mut read_socket: S, device_id: String, mut sender: Sender<MessageType>)
 where
     S: AsyncReadExt + Unpin,
 {

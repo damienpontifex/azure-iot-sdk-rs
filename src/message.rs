@@ -11,9 +11,9 @@ pub enum MessageType {
 
 #[derive(Debug)]
 pub struct DirectMethodResponse {
-    pub status: i32,
-    pub request_id: String,
-    pub body: String,
+    pub(crate) status: i32,
+    pub(crate) request_id: String,
+    pub(crate) body: String,
 }
 
 impl DirectMethodResponse {
@@ -41,9 +41,9 @@ const MESSAGE_ID: &str = "message-id";
 /// Message used in body of communication
 #[derive(Default, Debug)]
 pub struct Message {
-    pub body: String,
-    pub properties: HashMap<String, String>,
-    pub system_properties: HashMap<String, String>,
+    pub(crate) body: String,
+    pub(crate) properties: HashMap<String, String>,
+    pub(crate) system_properties: HashMap<String, String>,
 }
 
 impl Message {
