@@ -1,0 +1,71 @@
+name: CI
+
+on: []
+  # schedule:
+  # - cron: '0 0 * * 0' # Run it every Sunday
+
+env:
+  AZURE_DEPLOYMENT_LOCATION: australiasoutheast
+  RESOURCE_GROUP_NAME: rsiothub-integration-testing
+  TEST_DEVICE_ID: FirstDevice
+  RUST_LOG: trace
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+
+    - uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Create IoT Hub from ARM template
+      uses: azure/CLI@v1
+      with:
+        azcliversion: latest
+        inlineScript: |
+          az extension add --name azure-iot
+
+          az group create \
+            --location ${{ env.AZURE_DEPLOYMENT_LOCATION }} \
+            --tags Environment=CI ApplicationName=AzureIoTSdkRsIntegration \
+            --name ${{ env.RESOURCE_GROUP_NAME }}
+
+          az deployment group create \
+            --resource-group ${{ env.RESOURCE_GROUP_NAME }} \
+            --template-file $GITHUB_WORKSPACE/integration_tests/azuredeploy.json \
+            --location ${{ env.AZURE_DEPLOYMENT_LOCATION }}
+
+          IOTHUB_HOSTNAME="$(az deployment group show -n azuredeploy -g iothub-dev -o tsv --query properties.outputs.hostname.value)"
+
+          echo "::set-output name=IOTHUB_HOSTNAME::${IOTHUB_NAME}"
+          echo "::set-output name=EVENTHUB_CONNECTION_STRING::$(az deployment group show -n azuredeploy -g iothub-dev -o tsv --query properties.outputs.eventHubConnectionString.value)"
+
+          az iot hub device-identity create \
+            --device-id ${{ env.TEST_DEVICE_ID }} \
+            --am shared_private_key \
+            --hub-name "${IOTHUB_HOSTNAME}" \
+            --resource-group ${{ env.RESOURCE_GROUP_NAME }}
+
+          DEVICE_CONNECTION_STRING="$(az iot hub device-identity show-connection-string --device-id ${{ env.TEST_DEVICE_ID }} --hub-name ${IOTHUB_HOSTNAME} --key-type primary --resource-group ${{ env.RESOURCE_GROUP_NAME }})"
+          echo "::set-output name=DEVICE_CONNECTION_STRING::${DEVICE_CONNECTION_STRING}"
+
+    - uses: actions-rs/cargo@v1
+      with:
+        command: run
+        args: --example temperature-client --release
+    # TODO: Handle example config
+    # TODO: Handle sending only a few messages
+    # TODO: Event hub listener application to verify end-to-end message send and receive
+
+    - name: Cleanup Azure resources
+      uses: azure/CLI@v1
+      if: always()
+      with:
+        azcliversion: latest
+        inlineScript: |
+          az group delete \
+            --name ${{ env.RESOURCE_GROUP_NAME }} \
+            --yes
+

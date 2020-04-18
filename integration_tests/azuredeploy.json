@@ -1,0 +1,42 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "location": {
+        "type": "string",
+        "defaultValue": "[resourceGroup().location]"
+      }
+    },
+    "variables": {
+      "iotHubName": "[concat('iot-sdk-rs-', uniqueString(resourceGroup().id))]"
+    },
+    "resources": [
+      {
+        "name": "[variables('iotHubName')]",
+        "type": "Microsoft.Devices/IotHubs",
+        "apiVersion": "2019-03-22",
+        "location": "[parameters('location')]",
+        "tags": {
+          "Environment": "CI"
+        },
+        "sku": {
+          "name": "B1",
+          "tier": "Basic",
+          "capacity": 1
+        },
+        "properties": {
+
+        }
+      }
+    ],
+    "outputs": {
+      "hostname": {
+        "type": "string",
+        "value": "[concat(variables('iotHubName'), '.azure-devices.net')]"
+      },
+      "EventHubConnectionString": {
+        "type": "string",
+        "value": "[concat('Endpoint=', reference(resourceId('Microsoft.Devices/IoTHubs', variables('iotHubName'))).eventHubEndpoints.events.endpoint, ';SharedAccessKeyName=iothubowner;SharedAccessKey=' ,listKeys(resourceId('Microsoft.Devices/IotHubs',variables('iotHubName')), '2019-03-22').value[0].primaryKey)]"
+      }
+    }
+}
