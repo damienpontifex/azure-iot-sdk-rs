@@ -10,6 +10,12 @@ keywords = ["iot", "azure"]
 license = "MIT"
 readme = "README.md"
 
+[features]
+default = ["c2d-messages", "direct-methods", "twin-properties"]
+direct-methods = []
+twin-properties = []
+c2d-messages = []
+
 [dependencies]
 native-tls = "0.2.4"
 mqtt-protocol = { version = "0.8.1", features = ["async"] }

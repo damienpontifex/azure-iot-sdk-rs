@@ -153,7 +153,17 @@ impl IoTHubClient {
 
         let (read_socket, mut write_socket) = tokio::io::split(socket);
 
-        subscribe(&mut write_socket, &device_id).await;
+        if cfg!(feature = "direct-methods")
+            || cfg!(feature = "twin-properties")
+            || cfg!(feature = "c2d-messages")
+        {
+            // Only send subscriptions and start receiver tasks if client is interested
+            // in subscribing to any of these capabilities
+
+            subscribe(&mut write_socket, &device_id).await;
+        } else {
+            debug!("Skipping topic subscribe as no features enabled");
+        }
 
         let (mut d2c_sender, d2c_receiver) = channel::<SendType>(100);
         tokio::spawn(create_sender(
@@ -164,19 +174,29 @@ impl IoTHubClient {
 
         tokio::spawn(ping(KEEP_ALIVE / 2, d2c_sender.clone()));
 
-        let (tx, rx) = channel::<MessageType>(100);
-        tokio::spawn(receive(read_socket, device_id.to_owned(), tx));
+        let mut c2d_receiver: Option<Receiver<MessageType>> = None;
+        if cfg!(feature = "direct-methods")
+            || cfg!(feature = "twin-properties")
+            || cfg!(feature = "c2d-messages")
+        {
+            let (tx, rx) = channel::<MessageType>(100);
+            tokio::spawn(receive(read_socket, device_id.to_owned(), tx));
+            c2d_receiver = Some(rx);
+        }
 
-        // Send empty message so hub will respond with device twin data
-        d2c_sender
-            .send(SendType::RequestTwinProperties("0".into()))
-            .await
-            .unwrap();
+        #[cfg(feature = "twin-properties")]
+        {
+            // Send empty message so hub will respond with device twin data
+            d2c_sender
+                .send(SendType::RequestTwinProperties("0".into()))
+                .await
+                .unwrap();
+        }
 
         IoTHubClient {
             device_id,
             d2c_sender,
-            c2d_receiver: Some(rx),
+            c2d_receiver,
         }
     }
 
@@ -452,28 +472,46 @@ async fn subscribe<S>(write_socket: &mut S, device_id: &str)
 where
     S: AsyncWriteExt + Unpin,
 {
-    let topics = vec![
-        (
+    let mut topics = vec![];
+
+    #[cfg(feature = "c2d-messages")]
+    {
+        topics.push((
             TopicFilter::new(format!("{}#", receive_topic_prefix(device_id))).unwrap(),
             QualityOfService::Level0,
-        ),
-        (
+        ));
+    }
+
+    #[cfg(feature = "twin-properties")]
+    {
+        topics.extend_from_slice(&[
+            (
+                TopicFilter::new("$iothub/twin/res/#").unwrap(),
+                QualityOfService::Level0,
+            ),
+            (
+                TopicFilter::new("$iothub/twin/PATCH/properties/desired/#").unwrap(),
+                QualityOfService::Level0,
+            ),
+        ]);
+    }
+
+    #[cfg(feature = "direct-methods")]
+    {
+        topics.push((
             TopicFilter::new("$iothub/methods/POST/#").unwrap(),
             QualityOfService::Level0,
-        ),
-        (
-            TopicFilter::new("$iothub/twin/res/#").unwrap(),
-            QualityOfService::Level0,
-        ),
-        (
-            TopicFilter::new("$iothub/twin/PATCH/properties/desired/#").unwrap(),
-            QualityOfService::Level0,
-        ),
-    ];
-    let subscribe_packet = SubscribePacket::new(10, topics);
-    let mut buf = Vec::new();
-    subscribe_packet.encode(&mut buf).unwrap();
-    write_socket.write_all(&buf[..]).await.unwrap();
+        ));
+    }
+
+    if !topics.is_empty() {
+        debug!("Subscribing to topics {:?}", topics);
+
+        let subscribe_packet = SubscribePacket::new(10, topics);
+        let mut buf = Vec::new();
+        subscribe_packet.encode(&mut buf).unwrap();
+        write_socket.write_all(&buf[..]).await.unwrap();
+    }
 }
 
 /// Start receive async loop as task that will send received messages from the cloud onto mpsc

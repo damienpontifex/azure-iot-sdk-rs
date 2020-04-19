@@ -1,5 +1,24 @@
 //! Azure IoT device client for writing iot device code in rust
 //!
+//! ## Feature flags
+//!
+//! SDK client uses [feature
+//! flags](https://doc.rust-lang.org/cargo/reference/features.html#the-features-section) to
+//! configure capabilities of the client sdk. By default all features are enabled.
+//!
+//! Device to cloud messaging is always available.
+//!
+//! - `c2d-messages`: Enables cloud to device messaging
+//! - `twin-properties`: Enables device twin property updates
+//! - `direct-methods`: Enables listening for direct method invocations
+//!
+//! ### Disabling capabilities
+//! If not all features are required, disable the default features and add only desired.
+//!
+//! ```toml
+//! azure_iot_sdk = { version = "0.2.0", features = [], default-features = false }
+//! ```
+//!
 //! # Examples
 //!
 //! A simple client
