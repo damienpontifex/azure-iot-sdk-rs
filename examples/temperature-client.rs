@@ -64,7 +64,7 @@ async fn main() {
 
     info!("Initialized client");
 
-    let mut rx = client.get_receiver();
+    let mut rx = client.get_receiver().unwrap();
     let mut tx = client.sender();
     let receiver = async move {
         while let Some(msg) = rx.recv().await {

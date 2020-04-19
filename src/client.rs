@@ -2,7 +2,7 @@ use crate::message::{DirectMethodInvokation, Message, MessageType, SendType};
 
 use chrono::{Duration, Utc};
 
-use tokio::io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::time;
@@ -29,7 +29,7 @@ const KEEP_ALIVE: u16 = 10;
 pub struct IoTHubClient {
     device_id: String,
     d2c_sender: Sender<SendType>,
-    pub c2d_receiver: Option<Receiver<MessageType>>,
+    c2d_receiver: Option<Receiver<MessageType>>,
 }
 
 fn generate_sas(hub: &str, device_id: &str, key: &str, expiry_timestamp: i64) -> String {
@@ -59,6 +59,25 @@ fn generate_sas(hub: &str, device_id: &str, key: &str, expiry_timestamp: i64) ->
 
 impl IoTHubClient {
     /// Create a new IoT Hub device client using the device's primary key
+    ///
+    /// # Arguments
+    ///
+    /// * `hub` - The IoT hub resource name
+    /// * `device_id` - The registered device to connect as
+    /// * `key` - The primary or secondary key for this device
+    ///
+    /// # Example
+    /// ```
+    /// use azure_iot_sdk::client::IoTHubClient;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let mut client = IoTHubClient::with_device_key(
+    ///         "iothubname.azure-devices.net".into(),
+    ///         "MyDeviceId".into(),
+    ///         "TheAccessKey".into()).await;
+    /// }
+    /// ```
     pub async fn with_device_key(hub: String, device_id: String, key: String) -> Self {
         let expiry = Utc::now() + Duration::days(1);
         let expiry = expiry.timestamp();
@@ -69,6 +88,21 @@ impl IoTHubClient {
     }
 
     /// Create a new IoT Hub device client using the device's connection string
+    ///
+    /// # Arguments
+    ///
+    /// * `connection_string` - The connection string for this device and iot hub
+    ///
+    /// # Example
+    /// ```
+    /// use azure_iot_sdk::client::IoTHubClient;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let mut client = IoTHubClient::from_connection_string(
+    ///         "HostName=iothubname.azure-devices.net;DeviceId=MyDeviceId;SharedAccessKey=TheAccessKey").await;
+    /// }
+    /// ```
     pub async fn from_connection_string(connection_string: &str) -> Self {
         let mut key = None;
         let mut device_id = None;
@@ -93,9 +127,31 @@ impl IoTHubClient {
     }
 
     /// Create a new IoT Hub device client using a shared access signature
+    ///
+    /// # Arguments
+    ///
+    /// * `hub_name` - The IoT hub resource name
+    /// * `device_id` - The registered device to connect as
+    /// * `sas` - The shared access signature for this device to connect with
+    ///
+    /// # Example
+    /// ```
+    /// use azure_iot_sdk::client::IoTHubClient;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let mut client = IoTHubClient::new(
+    ///         "iothubname.azure-devices.net".into(),
+    ///         "MyDeviceId".into(),
+    ///         "SharedAccessSignature sr=iothubname.azure-devices.net%2Fdevices%2MyDeviceId&sig=vn0%2BgyIUKgaBhEU0ypyOhJ0gPK5fSY1TKdvcJ1HxhnQ%3D&se=1587123309".into()).await;
+    /// }
+    /// ```
     pub async fn new(hub_name: String, device_id: String, sas: String) -> Self {
-        let (read_socket, mut write_socket) =
-            connect(hub_name.to_owned(), device_id.to_owned(), sas.to_owned()).await;
+        let mut socket = tcp_connect(&hub_name).await;
+
+        mqtt_connect(&hub_name, &device_id, &sas, &mut socket).await;
+
+        let (read_socket, mut write_socket) = tokio::io::split(socket);
 
         subscribe(&mut write_socket, &device_id).await;
 
@@ -125,6 +181,37 @@ impl IoTHubClient {
     }
 
     /// Send a device to cloud message for this device to the IoT Hub
+    ///
+    /// #Example
+    /// ```
+    /// use azure_iot_sdk::client::IoTHubClient;
+    /// use azure_iot_sdk::message::Message;
+    /// use tokio::time;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let mut client = IoTHubClient::with_device_key(
+    ///         "iothubname.azure-devices.net".into(),
+    ///         "MyDeviceId".into(),
+    ///         "TheAccessKey".into()).await;
+    ///
+    ///     let mut interval = time::interval(time::Duration::from_secs(1));
+    ///     let mut count: u32 = 0;
+    ///
+    ///     loop {
+    ///         interval.tick().await;
+    ///
+    ///         let msg = Message::builder()
+    ///             .set_body_from(format!("Message #{}", count))
+    ///             .set_message_id(format!("{}-t", count))
+    ///             .build();
+    ///
+    ///         client.send_message(msg).await;
+    ///
+    ///         count += 1;
+    ///     }
+    /// }
+    /// ```
     pub async fn send_message(&mut self, message: Message) {
         self.d2c_sender
             .send(SendType::Message(message))
@@ -134,12 +221,77 @@ impl IoTHubClient {
 
     /// Gets a new Sender channel that is paired with the hub device to
     /// cloud send functionality
+    ///
+    /// #Example
+    /// ```
+    /// use azure_iot_sdk::client::IoTHubClient;
+    /// use azure_iot_sdk::message::{Message, SendType};
+    /// use tokio::time;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let mut client = IoTHubClient::with_device_key(
+    ///         "iothubname.azure-devices.net".into(),
+    ///         "MyDeviceId".into(),
+    ///         "TheAccessKey".into()).await;
+    ///
+    ///     let mut interval = time::interval(time::Duration::from_secs(1));
+    ///     let mut count: u32 = 0;
+    ///     let mut tx = client.sender();
+    ///
+    ///     loop {
+    ///         interval.tick().await;
+    ///
+    ///         let msg = Message::builder()
+    ///             .set_body_from(format!("Message #{}", count))
+    ///             .set_message_id(format!("{}-t", count))
+    ///             .build();
+    ///
+    ///         tx.send(SendType::Message(msg))
+    ///             .await
+    ///             .unwrap();
+    ///
+    ///         count += 1;
+    ///     }
+    /// }
+    /// ```
     pub fn sender(&mut self) -> Sender<SendType> {
         self.d2c_sender.clone()
     }
 
-    pub fn get_receiver(&mut self) -> Receiver<MessageType> {
-        std::mem::replace(&mut self.c2d_receiver, None).unwrap()
+    /// Get the receiver channel where cloud to device messages will be sent to.
+    /// This can only be retrieved once as the receive side of the channel is a to
+    /// one operation. If the receiver has been retrieved already, `None` will be returned
+    ///
+    /// # Example
+    /// ```
+    /// use azure_iot_sdk::client::IoTHubClient;
+    /// use azure_iot_sdk::message::MessageType;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let mut client = IoTHubClient::with_device_key(
+    ///         "iothubname.azure-devices.net".into(),
+    ///         "MyDeviceId".into(),
+    ///         "TheAccessKey".into()).await;
+    ///
+    ///     let mut rx = client.get_receiver().unwrap();
+    ///     while let Some(msg) = rx.recv().await {
+    ///         match msg {
+    ///             MessageType::C2DMessage(message) => println!("Received message {:?}", message),
+    ///             MessageType::DirectMethod(direct_method) => println!("Received direct method {:?}", direct_method),
+    ///             MessageType::DesiredPropertyUpdate(property_update) => println!("Received property update {:?}", property_update)
+    ///         }
+    ///     }
+    /// }
+    /// ```
+
+    pub fn get_receiver(&mut self) -> Option<Receiver<MessageType>> {
+        if self.c2d_receiver.is_some() {
+            return Some(std::mem::replace(&mut self.c2d_receiver, None).unwrap());
+        }
+
+        None
     }
 }
 
@@ -164,19 +316,13 @@ async fn ping(interval: u16, mut sender: Sender<SendType>) {
 /// ```
 /// // let (read_socket, write_socket) = client::connect("myiothub".to_string(), "myfirstdevice".to_string(), "SharedAccessSignature sr=myiothub.azure-devices.net%2Fdevices%2Fmyfirstdevice&sig=blahblah&se=1586909077".to_string()).await;
 /// ```
-async fn connect(
-    iot_hub: String,
-    device_id: String,
-    sas: String,
-) -> (
-    ReadHalf<TlsStream<TcpStream>>,
-    WriteHalf<TlsStream<TcpStream>>,
-) {
+async fn tcp_connect(iot_hub: &str) -> TlsStream<TcpStream> {
     let socket = TcpStream::connect(format!("{}:8883", iot_hub))
         .await
         .unwrap();
 
     trace!("Connected to tcp socket {:?}", socket);
+
     let cx = TlsConnector::from(
         native_tls::TlsConnector::builder()
             .min_protocol_version(Some(native_tls::Protocol::Tlsv12))
@@ -184,11 +330,19 @@ async fn connect(
             .unwrap(),
     );
 
-    let mut socket = cx.connect(&iot_hub, socket).await.unwrap();
+    let socket = cx.connect(&iot_hub, socket).await.unwrap();
+
     trace!("Connected tls context {:?}", cx);
 
-    let mut conn = ConnectPacket::new("MQTT", &device_id);
-    conn.set_client_identifier(&device_id);
+    socket
+}
+
+async fn mqtt_connect<S>(iot_hub: &str, device_id: &str, sas: &str, mut socket: S)
+where
+    S: AsyncWriteExt + AsyncRead + Unpin,
+{
+    let mut conn = ConnectPacket::new("MQTT", device_id);
+    conn.set_client_identifier(device_id);
     conn.set_clean_session(false);
     conn.set_keep_alive(KEEP_ALIVE);
     conn.set_user_name(Some(format!(
@@ -216,8 +370,6 @@ async fn connect(
         Ok(pck) => panic!("Unexpected packet received after connect {:?}", pck),
         Err(err) => panic!("Error decoding connack packet {:?}", err),
     }
-
-    tokio::io::split(socket)
 }
 
 fn receive_topic_prefix(device_id: &str) -> String {
@@ -426,4 +578,7 @@ mod tests {
     fn test_add() {
         assert_eq!(generate_sas("myiothub.azure-devices.net", "FirstDevice", "O+H9VTcdJP0Tqkl7bh4nVG0OJNrAataMpuWB54D0VEc=", 1_587_123_309), "SharedAccessSignature sr=myiothub.azure-devices.net%2Fdevices%2FFirstDevice&sig=vn0%2BgyIUKgaBhEU0ypyOhJ0gPK5fSY1TKdvcJ1HxhnQ%3D&se=1587123309".to_string());
     }
+
+    #[test]
+    fn test_mqtt_connect() {}
 }
