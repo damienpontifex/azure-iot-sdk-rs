@@ -1,6 +1,6 @@
 [package]
 name = "azure_iot_sdk"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Damien Pontifex <damien.pontifex@gmail.com>"]
 edition = "2018"
 repository = "https://github.com/damienpontifex/azure-iot-sdk-rs"
