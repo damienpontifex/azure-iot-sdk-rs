@@ -312,10 +312,10 @@ impl IoTHubClient {
 
     pub fn get_receiver(&mut self) -> Option<Receiver<MessageType>> {
         if self.c2d_receiver.is_some() {
-            return Some(std::mem::replace(&mut self.c2d_receiver, None).unwrap());
+            Some(std::mem::replace(&mut self.c2d_receiver, None).unwrap())
+        } else {
+            None
         }
-
-        None
     }
 }
 
