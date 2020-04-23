@@ -25,6 +25,10 @@ const HOSTNAME_KEY: &str = "HostName";
 const SHAREDACCESSKEY_KEY: &str = "SharedAccessKey";
 const KEEP_ALIVE: u16 = 10;
 
+const DIRECT_METHOD_TOPIC_PREFIX: &str = "$iothub/methods/POST/";
+const REQUEST_ID_PARAM: &str = "$rid=";
+const TWIN_TOPIC_PREFIX: &str = "$iothub/twin/";
+
 #[derive(Debug)]
 pub struct IoTHubClient {
     device_id: String,
@@ -67,7 +71,7 @@ impl IoTHubClient {
     /// * `key` - The primary or secondary key for this device
     ///
     /// # Example
-    /// ```
+    /// ```no_run
     /// use azure_iot_sdk::client::IoTHubClient;
     ///
     /// #[tokio::main]
@@ -94,7 +98,7 @@ impl IoTHubClient {
     /// * `connection_string` - The connection string for this device and iot hub
     ///
     /// # Example
-    /// ```
+    /// ```no_run
     /// use azure_iot_sdk::client::IoTHubClient;
     ///
     /// #[tokio::main]
@@ -135,7 +139,7 @@ impl IoTHubClient {
     /// * `sas` - The shared access signature for this device to connect with
     ///
     /// # Example
-    /// ```
+    /// ```no_run
     /// use azure_iot_sdk::client::IoTHubClient;
     ///
     /// #[tokio::main]
@@ -193,7 +197,7 @@ impl IoTHubClient {
                 .unwrap();
         }
 
-        IoTHubClient {
+        Self {
             device_id,
             d2c_sender,
             c2d_receiver,
@@ -203,7 +207,7 @@ impl IoTHubClient {
     /// Send a device to cloud message for this device to the IoT Hub
     ///
     /// #Example
-    /// ```
+    /// ```no_run
     /// use azure_iot_sdk::client::IoTHubClient;
     /// use azure_iot_sdk::message::Message;
     /// use tokio::time;
@@ -243,7 +247,7 @@ impl IoTHubClient {
     /// cloud send functionality
     ///
     /// #Example
-    /// ```
+    /// ```no_run
     /// use azure_iot_sdk::client::IoTHubClient;
     /// use azure_iot_sdk::message::{Message, SendType};
     /// use tokio::time;
@@ -284,7 +288,7 @@ impl IoTHubClient {
     /// one operation. If the receiver has been retrieved already, `None` will be returned
     ///
     /// # Example
-    /// ```
+    /// ```no_run
     /// use azure_iot_sdk::client::IoTHubClient;
     /// use azure_iot_sdk::message::MessageType;
     ///
@@ -308,10 +312,10 @@ impl IoTHubClient {
 
     pub fn get_receiver(&mut self) -> Option<Receiver<MessageType>> {
         if self.c2d_receiver.is_some() {
-            return Some(std::mem::replace(&mut self.c2d_receiver, None).unwrap());
+            Some(std::mem::replace(&mut self.c2d_receiver, None).unwrap())
+        } else {
+            None
         }
-
-        None
     }
 }
 
@@ -333,13 +337,11 @@ async fn ping(interval: u16, mut sender: Sender<SendType>) {
 /// * `sas` - The shared access signature for the device to authenticate with
 ///
 /// # Example
-/// ```
+/// ```no_run
 /// // let (read_socket, write_socket) = client::connect("myiothub".to_string(), "myfirstdevice".to_string(), "SharedAccessSignature sr=myiothub.azure-devices.net%2Fdevices%2Fmyfirstdevice&sig=blahblah&se=1586909077".to_string()).await;
 /// ```
 async fn tcp_connect(iot_hub: &str) -> TlsStream<TcpStream> {
-    let socket = TcpStream::connect(format!("{}:8883", iot_hub))
-        .await
-        .unwrap();
+    let socket = TcpStream::connect((iot_hub, 8883)).await.unwrap();
 
     trace!("Connected to tcp socket {:?}", socket);
 
@@ -456,7 +458,8 @@ where
                     request_id
                 );
                 let packet = PublishPacket::new(
-                    TopicName::new(format!("$iothub/twin/GET/?$rid={}", request_id)).unwrap(),
+                    TopicName::new(format!("{}GET/?$rid={}", TWIN_TOPIC_PREFIX, request_id))
+                        .unwrap(),
                     QoSWithPacketIdentifier::Level0,
                     "".as_bytes(),
                 );
@@ -486,11 +489,12 @@ where
     {
         topics.extend_from_slice(&[
             (
-                TopicFilter::new("$iothub/twin/res/#").unwrap(),
+                TopicFilter::new(format!("{}res/#", TWIN_TOPIC_PREFIX)).unwrap(),
                 QualityOfService::Level0,
             ),
             (
-                TopicFilter::new("$iothub/twin/PATCH/properties/desired/#").unwrap(),
+                TopicFilter::new(format!("{}PATCH/properties/desired/#", TWIN_TOPIC_PREFIX))
+                    .unwrap(),
                 QualityOfService::Level0,
             ),
         ]);
@@ -499,7 +503,7 @@ where
     #[cfg(feature = "direct-methods")]
     {
         topics.push((
-            TopicFilter::new("$iothub/methods/POST/#").unwrap(),
+            TopicFilter::new(format!("{}#", DIRECT_METHOD_TOPIC_PREFIX)).unwrap(),
             QualityOfService::Level0,
         ));
     }
@@ -570,31 +574,24 @@ where
                         }
                     }
                     sender.send(MessageType::C2DMessage(message)).await.unwrap();
-                } else if publ.topic_name().starts_with("$iothub/twin/") {
+                } else if publ.topic_name().starts_with(TWIN_TOPIC_PREFIX) {
                     sender
                         .send(MessageType::DesiredPropertyUpdate(message))
                         .await
                         .unwrap();
-                } else if publ.topic_name().starts_with("$iothub/methods/POST/") {
+                } else if publ.topic_name().starts_with(DIRECT_METHOD_TOPIC_PREFIX) {
                     // Sent to topic in format $iothub/methods/POST/{method name}/?$rid={request id}
-                    let details = publ
-                        .topic_name()
-                        .trim_start_matches("$iothub/methods/POST/");
 
-                    let method_name = match details.find('/') {
-                        Some(method_name_end) => details[..method_name_end].to_string(),
-                        None => String::new(),
-                    };
-                    let request_id = match details.find("$rid=") {
-                        Some(request_id_start) => details[request_id_start + 5..].to_string(),
-                        None => String::new(),
-                    };
+                    // Strip the prefix from the topic left with {method name}/$rid={request id}
+                    let details = &publ.topic_name()[DIRECT_METHOD_TOPIC_PREFIX.len()..];
+
+                    let method_components: Vec<_> = details.split('/').collect();
 
                     sender
                         .send(MessageType::DirectMethod(DirectMethodInvokation {
-                            method_name,
+                            method_name: method_components[0].to_string(),
                             message,
-                            request_id,
+                            request_id: method_components[1][REQUEST_ID_PARAM.len()..].to_string(),
                         }))
                         .await
                         .unwrap();

@@ -13,9 +13,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
+      name: Checkout
 
     - uses: actions-rs/cargo@v1
+      name: Build
       with:
         command: build
+        args: --release --all-features
+
+    - uses: actions-rs/cargo@v1
+      name: Test
+      with:
+        command: test
         args: --release --all-features
 
