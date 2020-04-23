@@ -18,7 +18,7 @@ pub struct DirectMethodResponse {
 
 impl DirectMethodResponse {
     pub fn new(request_id: String, status: i32, body: Option<String>) -> Self {
-        DirectMethodResponse {
+        Self {
             status,
             request_id,
             body: body.unwrap_or_default(),
@@ -49,7 +49,7 @@ pub struct Message {
 
 impl Message {
     pub fn new(body: String) -> Self {
-        Message {
+        Self {
             body,
             ..Default::default()
         }
