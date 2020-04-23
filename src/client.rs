@@ -71,7 +71,7 @@ impl IoTHubClient {
     /// * `key` - The primary or secondary key for this device
     ///
     /// # Example
-    /// ```
+    /// ```no_run
     /// use azure_iot_sdk::client::IoTHubClient;
     ///
     /// #[tokio::main]
@@ -98,7 +98,7 @@ impl IoTHubClient {
     /// * `connection_string` - The connection string for this device and iot hub
     ///
     /// # Example
-    /// ```
+    /// ```no_run
     /// use azure_iot_sdk::client::IoTHubClient;
     ///
     /// #[tokio::main]
@@ -139,7 +139,7 @@ impl IoTHubClient {
     /// * `sas` - The shared access signature for this device to connect with
     ///
     /// # Example
-    /// ```
+    /// ```no_run
     /// use azure_iot_sdk::client::IoTHubClient;
     ///
     /// #[tokio::main]
@@ -207,7 +207,7 @@ impl IoTHubClient {
     /// Send a device to cloud message for this device to the IoT Hub
     ///
     /// #Example
-    /// ```
+    /// ```no_run
     /// use azure_iot_sdk::client::IoTHubClient;
     /// use azure_iot_sdk::message::Message;
     /// use tokio::time;
@@ -247,7 +247,7 @@ impl IoTHubClient {
     /// cloud send functionality
     ///
     /// #Example
-    /// ```
+    /// ```no_run
     /// use azure_iot_sdk::client::IoTHubClient;
     /// use azure_iot_sdk::message::{Message, SendType};
     /// use tokio::time;
@@ -288,7 +288,7 @@ impl IoTHubClient {
     /// one operation. If the receiver has been retrieved already, `None` will be returned
     ///
     /// # Example
-    /// ```
+    /// ```no_run
     /// use azure_iot_sdk::client::IoTHubClient;
     /// use azure_iot_sdk::message::MessageType;
     ///
@@ -337,7 +337,7 @@ async fn ping(interval: u16, mut sender: Sender<SendType>) {
 /// * `sas` - The shared access signature for the device to authenticate with
 ///
 /// # Example
-/// ```
+/// ```no_run
 /// // let (read_socket, write_socket) = client::connect("myiothub".to_string(), "myfirstdevice".to_string(), "SharedAccessSignature sr=myiothub.azure-devices.net%2Fdevices%2Fmyfirstdevice&sig=blahblah&se=1586909077".to_string()).await;
 /// ```
 async fn tcp_connect(iot_hub: &str) -> TlsStream<TcpStream> {

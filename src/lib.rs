@@ -24,6 +24,7 @@
 //! A simple client
 //! ```no_run
 //! use azure_iot_sdk::client::IoTHubClient;
+//! use azure_iot_sdk::message::Message;
 //! use tokio::time;
 //!
 //! #[tokio::main]
