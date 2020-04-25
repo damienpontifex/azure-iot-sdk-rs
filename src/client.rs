@@ -10,6 +10,7 @@ const DEVICEID_KEY: &str = "DeviceId";
 const HOSTNAME_KEY: &str = "HostName";
 const SHAREDACCESSKEY_KEY: &str = "SharedAccessKey";
 
+/// Client for communicating with IoT hub
 #[derive(Debug, Clone)]
 pub struct IoTHubClient {
     device_id: String,
@@ -175,6 +176,26 @@ impl IoTHubClient {
         self.transport.send_message(message).await;
     }
 
+    /// Define the cloud to device message handler
+    ///
+    /// # Example
+    /// ```no_run
+    /// use azure_iot_sdk::client::IoTHubClient;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let mut client = IoTHubClient::with_device_key(
+    ///         "iothubname.azure-devices.net".into(),
+    ///         "MyDeviceId".into(),
+    ///         "TheAccessKey".into()).await;
+    ///
+    ///     client
+    ///        .on_message(|msg| {
+    ///            println!("Received message {:?}", msg);
+    ///        })
+    ///        .await;
+    /// }
+    /// ```
     #[cfg(feature = "c2d-messages")]
     pub async fn on_message<T>(&mut self, handler: T)
     where
@@ -188,6 +209,27 @@ impl IoTHubClient {
             .await;
     }
 
+    /// Define the message handler for direct method invocation
+    ///
+    /// # Example
+    /// ```no_run
+    /// use azure_iot_sdk::client::IoTHubClient;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let mut client = IoTHubClient::with_device_key(
+    ///         "iothubname.azure-devices.net".into(),
+    ///         "MyDeviceId".into(),
+    ///         "TheAccessKey".into()).await;
+    ///
+    ///     client
+    ///        .on_direct_method(|method_name, msg| {
+    ///             println!("Received direct method {} {}", method_name, msg.body);
+    ///             0
+    ///         })
+    ///         .await;
+    /// }
+    /// ```
     #[cfg(feature = "direct-methods")]
     pub async fn on_direct_method<T>(&mut self, handler: T)
     where
@@ -201,6 +243,26 @@ impl IoTHubClient {
             .await;
     }
 
+    /// Define the cloud to device message handler
+    ///
+    /// # Example
+    /// ```no_run
+    /// use azure_iot_sdk::client::IoTHubClient;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let mut client = IoTHubClient::with_device_key(
+    ///         "iothubname.azure-devices.net".into(),
+    ///         "MyDeviceId".into(),
+    ///         "TheAccessKey".into()).await;
+    ///
+    ///     client
+    ///        .on_twin_update(|msg| {
+    ///            println!("Received message {:?}", msg);
+    ///        })
+    ///        .await;
+    /// }
+    /// ```
     #[cfg(feature = "twin-properties")]
     pub async fn on_twin_update<T>(&mut self, handler: T)
     where

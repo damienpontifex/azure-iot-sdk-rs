@@ -50,7 +50,7 @@
 //! }
 //! ```
 
-// #![warn(missing_debug_implementations, rust_2018_idioms, missing_docs)]
+#![warn(missing_debug_implementations, rust_2018_idioms, missing_docs)]
 
 #[macro_use]
 extern crate log;
@@ -58,6 +58,8 @@ extern crate log;
 /// IoT SDK package version
 pub const SDK_VERSION: &str = std::env!("CARGO_PKG_VERSION");
 
+/// The IoT Hub client
 pub mod client;
+/// Message types for communicating with the IoT Hub
 pub mod message;
 pub(crate) mod mqtt_transport;
