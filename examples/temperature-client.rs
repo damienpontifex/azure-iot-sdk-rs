@@ -135,7 +135,7 @@ async fn main() {
             let temp = sensor.get_reading();
 
             let msg = Message::builder()
-                .set_body(serde_json::to_string(&temp).unwrap().as_bytes().to_vec())
+                .set_body(serde_json::to_vec(&temp).unwrap())
                 .set_message_id(format!("{}-t", count))
                 .build();
 
@@ -156,12 +156,7 @@ async fn main() {
             let humidity = sensor.get_reading();
 
             let msg = Message::builder()
-                .set_body(
-                    serde_json::to_string(&humidity)
-                        .unwrap()
-                        .as_bytes()
-                        .to_vec(),
-                )
+                .set_body(serde_json::to_vec(&humidity).unwrap())
                 .set_message_id(format!("{}-h", count))
                 .build();
 
