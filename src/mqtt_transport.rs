@@ -1,6 +1,4 @@
-use crate::message::{
-    DirectMethodInvokation, DirectMethodResponse, Message, MessageType, SendType,
-};
+use crate::message::{DirectMethodResponse, Message, SendType};
 // use chrono::{Duration, Utc};
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -21,10 +19,6 @@ const REQUEST_ID_PARAM: &str = "?$rid=";
 
 fn receive_topic_prefix(device_id: &str) -> String {
     format!("devices/{}/messages/devicebound/", device_id)
-}
-
-fn type_of<T>(_: T) -> &'static str {
-    std::any::type_name::<T>()
 }
 
 /// Connect to Azure IoT Hub
@@ -56,53 +50,6 @@ async fn tcp_connect(iot_hub: &str) -> TlsStream<TcpStream> {
     trace!("Connected tls context {:?}", cx);
 
     socket
-}
-
-async fn subscribe<S>(write_socket: &mut S, device_id: &str)
-where
-    S: AsyncWriteExt + Unpin,
-{
-    let mut topics = vec![];
-
-    #[cfg(feature = "c2d-messages")]
-    {
-        topics.push((
-            TopicFilter::new(format!("{}#", receive_topic_prefix(device_id))).unwrap(),
-            QualityOfService::Level0,
-        ));
-    }
-
-    #[cfg(feature = "twin-properties")]
-    {
-        topics.extend_from_slice(&[
-            (
-                TopicFilter::new(format!("{}res/#", TWIN_TOPIC_PREFIX)).unwrap(),
-                QualityOfService::Level0,
-            ),
-            (
-                TopicFilter::new(format!("{}PATCH/properties/desired/#", TWIN_TOPIC_PREFIX))
-                    .unwrap(),
-                QualityOfService::Level0,
-            ),
-        ]);
-    }
-
-    #[cfg(feature = "direct-methods")]
-    {
-        topics.push((
-            TopicFilter::new(format!("{}#", DIRECT_METHOD_TOPIC_PREFIX)).unwrap(),
-            QualityOfService::Level0,
-        ));
-    }
-
-    if !topics.is_empty() {
-        debug!("Subscribing to topics {:?}", topics);
-
-        let subscribe_packet = SubscribePacket::new(10, topics);
-        let mut buf = Vec::new();
-        subscribe_packet.encode(&mut buf).unwrap();
-        write_socket.write_all(&buf[..]).await.unwrap();
-    }
 }
 
 /// Async loop to create task that will received from mpsc receiver and send to IoT hub
@@ -174,10 +121,8 @@ where
                 packet.encode(&mut buf).unwrap();
                 write_socket.write_all(&buf[..]).await.unwrap();
             }
-            SendType::Subscribe(topic_filter, qos) => {
-                let topics = vec![(topic_filter, qos)];
-
-                let subscribe_packet = SubscribePacket::new(10, topics);
+            SendType::Subscribe(topic_filters) => {
+                let subscribe_packet = SubscribePacket::new(10, topic_filters);
                 let mut buf = Vec::new();
                 subscribe_packet.encode(&mut buf).unwrap();
                 write_socket.write_all(&buf[..]).await.unwrap();
@@ -260,10 +205,6 @@ async fn receive<S>(
                       if let Some(twin_handler) = &twin_handler {
                         twin_handler(message);
                       }
-                        // sender
-                        //     .send(MessageType::DesiredPropertyUpdate(message))
-                        //     .await
-                        //     .unwrap();
                     } else if publ.topic_name().starts_with(DIRECT_METHOD_TOPIC_PREFIX) {
                         // Sent to topic in format $iothub/methods/POST/{method name}/?$rid={request id}
 
@@ -282,17 +223,6 @@ async fn receive<S>(
                         let request_id = method_components[1][REQUEST_ID_PARAM.len()..].to_string();
                         let to_respond_with = SendType::RespondToDirectMethod(DirectMethodResponse::new(request_id, method_response, None));
                         sender.send(to_respond_with).await.unwrap();
-
-                        // sender
-                        //     .send(MessageType::DirectMethod(DirectMethodInvokation {
-                        //         method_name: method_components[0].to_string(),
-                        //         message,
-                        //         request_id: method_components[1][REQUEST_ID_PARAM.len()..].to_string(),
-                        //     }))
-                        //     .await
-                        //     .unwrap();
-
-                        // TODO: provide tokio::sync::oneshot to respond to direct method on
                     }
                 }
                 _ => {}
@@ -315,7 +245,6 @@ async fn ping(interval: u16, mut sender: Sender<SendType>) {
 pub(crate) struct MqttTransport {
     pub(crate) handler_tx: Sender<MessageHandler>,
     pub(crate) d2c_sender: Sender<SendType>,
-    // pub(crate) c2d_receiver: Option<Receiver<MessageType>>,
 }
 
 impl MqttTransport {
@@ -354,18 +283,6 @@ impl MqttTransport {
 
         let (read_socket, write_socket) = tokio::io::split(socket);
 
-        if cfg!(feature = "direct-methods")
-            || cfg!(feature = "twin-properties")
-            || cfg!(feature = "c2d-messages")
-        {
-            // Only send subscriptions and start receiver tasks if client is interested
-            // in subscribing to any of these capabilities
-
-            // subscribe(&mut write_socket, &device_id).await;
-        } else {
-            debug!("Skipping topic subscribe as no features enabled");
-        }
-
         let (mut d2c_sender, d2c_receiver) = channel::<SendType>(100);
         tokio::spawn(create_sender(
             write_socket,
@@ -375,13 +292,11 @@ impl MqttTransport {
 
         tokio::spawn(ping(KEEP_ALIVE / 2, d2c_sender.clone()));
 
-        // let mut c2d_receiver: Option<Receiver<MessageType>> = None;
         let (handler_tx, handler_rx) = channel::<MessageHandler>(3);
         if cfg!(feature = "direct-methods")
             || cfg!(feature = "twin-properties")
             || cfg!(feature = "c2d-messages")
         {
-            // let (tx, rx) = channel::<MessageType>(100);
             let sender = d2c_sender.clone();
             tokio::spawn(receive(
                 read_socket,
@@ -389,7 +304,6 @@ impl MqttTransport {
                 sender,
                 handler_rx,
             ));
-            // c2d_receiver = Some(rx);
         }
 
         #[cfg(feature = "twin-properties")]
@@ -404,7 +318,6 @@ impl MqttTransport {
         Self {
             handler_tx,
             d2c_sender,
-            // c2d_receiver,
         }
     }
 
@@ -418,10 +331,29 @@ impl MqttTransport {
     #[cfg(feature = "c2d-messages")]
     pub(crate) async fn subscribe_to_c2d_messages(&mut self, device_id: &str) {
         self.d2c_sender
-            .send(SendType::Subscribe(
+            .send(SendType::Subscribe(vec![(
                 TopicFilter::new(format!("{}#", receive_topic_prefix(device_id))).unwrap(),
                 QualityOfService::Level0,
-            ))
+            )]))
+            .await
+            .unwrap();
+    }
+
+    #[cfg(feature = "twin-properties")]
+    pub(crate) async fn subscribe_to_twin_updates(&mut self) {
+        let topics = vec![
+            (
+                TopicFilter::new(format!("{}res/#", TWIN_TOPIC_PREFIX)).unwrap(),
+                QualityOfService::Level0,
+            ),
+            (
+                TopicFilter::new(format!("{}PATCH/properties/desired/#", TWIN_TOPIC_PREFIX))
+                    .unwrap(),
+                QualityOfService::Level0,
+            ),
+        ];
+        self.d2c_sender
+            .send(SendType::Subscribe(topics))
             .await
             .unwrap();
     }
@@ -429,10 +361,10 @@ impl MqttTransport {
     #[cfg(feature = "direct-methods")]
     pub(crate) async fn subscribe_to_direct_methods(&mut self) {
         self.d2c_sender
-            .send(SendType::Subscribe(
+            .send(SendType::Subscribe(vec![(
                 TopicFilter::new(format!("{}#", DIRECT_METHOD_TOPIC_PREFIX)).unwrap(),
                 QualityOfService::Level0,
-            ))
+            )]))
             .await
             .unwrap();
     }

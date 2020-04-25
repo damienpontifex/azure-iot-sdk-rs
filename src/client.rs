@@ -1,9 +1,7 @@
-use crate::message::{Message, MessageType};
+use crate::message::Message;
 use crate::mqtt_transport::{MessageHandler, MqttTransport};
 
 use chrono::{Duration, Utc};
-
-use tokio::sync::mpsc::Receiver;
 
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
@@ -218,7 +216,10 @@ impl IoTHubClient {
         T: Fn(Message) + Send + 'static,
     {
         let message_handler = MessageHandler::MessageHandler(Box::new(handler));
-        self.transport.handler_tx.send(message_handler).await;
+        if let Err(_) = self.transport.handler_tx.send(message_handler).await {
+            error!("Failed to set message handler for c2d messages");
+            return;
+        }
 
         self.transport
             .subscribe_to_c2d_messages(&self.device_id)
@@ -231,17 +232,27 @@ impl IoTHubClient {
         T: Fn(String, Message) -> i32 + Send + 'static,
     {
         let message_handler = MessageHandler::DirectMethodHandler(Box::new(handler));
-        self.transport.handler_tx.send(message_handler).await;
+        if let Err(_) = self.transport.handler_tx.send(message_handler).await {
+            error!("Failed to set message handler for direct method invocation");
+            return;
+        }
 
         self.transport.subscribe_to_direct_methods().await;
     }
 
-    // #[cfg(feature = "twin-properties")]
-    // pub fn on_twin_update<T>(&self, handler: T)
-    // where
-    //     T: Fn(Message),
-    // {
-    // }
+    #[cfg(feature = "twin-properties")]
+    pub async fn on_twin_update<T>(&mut self, handler: T)
+    where
+        T: Fn(Message) + Send + 'static,
+    {
+        let message_handler = MessageHandler::TwinUpdateHandler(Box::new(handler));
+        if let Err(_) = self.transport.handler_tx.send(message_handler).await {
+            error!("Failed to set message handler for twin property update");
+            return;
+        }
+
+        self.transport.subscribe_to_twin_updates().await;
+    }
 }
 
 #[cfg(test)]

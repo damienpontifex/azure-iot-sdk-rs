@@ -36,7 +36,7 @@ pub enum SendType {
     Ping,
     RespondToDirectMethod(DirectMethodResponse),
     RequestTwinProperties(String),
-    Subscribe(TopicFilter, QualityOfService),
+    Subscribe(Vec<(TopicFilter, QualityOfService)>),
 }
 
 // System properties that are user settable

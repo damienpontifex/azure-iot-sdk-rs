@@ -1,10 +1,7 @@
 #[macro_use]
 extern crate log;
 
-use azure_iot_sdk::{
-    client::IoTHubClient,
-    message::{DirectMethodResponse, Message, MessageType, SendType},
-};
+use azure_iot_sdk::{client::IoTHubClient, message::Message};
 
 use tokio::time;
 
