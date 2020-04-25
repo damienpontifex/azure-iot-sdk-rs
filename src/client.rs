@@ -202,10 +202,7 @@ impl IoTHubClient {
         T: Fn(Message) + Send + 'static,
     {
         self.transport
-            .set_message_handler(
-                &self.device_id,
-                MessageHandler::MessageHandler(Box::new(handler)),
-            )
+            .set_message_handler(&self.device_id, MessageHandler::Message(Box::new(handler)))
             .await;
     }
 
@@ -238,7 +235,7 @@ impl IoTHubClient {
         self.transport
             .set_message_handler(
                 &self.device_id,
-                MessageHandler::DirectMethodHandler(Box::new(handler)),
+                MessageHandler::DirectMethod(Box::new(handler)),
             )
             .await;
     }
@@ -271,7 +268,7 @@ impl IoTHubClient {
         self.transport
             .set_message_handler(
                 &self.device_id,
-                MessageHandler::TwinUpdateHandler(Box::new(handler)),
+                MessageHandler::TwinUpdate(Box::new(handler)),
             )
             .await;
     }

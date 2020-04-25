@@ -9,8 +9,6 @@ use serde::{Deserialize, Serialize};
 
 use rand_distr::{Distribution, Normal};
 
-use config;
-
 #[derive(Debug, Deserialize)]
 struct DeviceConfig {
     hostname: String,

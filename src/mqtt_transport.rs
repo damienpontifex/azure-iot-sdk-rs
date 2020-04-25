@@ -140,9 +140,9 @@ where
 }
 
 pub(crate) enum MessageHandler {
-    MessageHandler(Box<dyn Fn(Message) + Send>),
-    TwinUpdateHandler(Box<dyn Fn(Message) + Send>),
-    DirectMethodHandler(Box<dyn Fn(String, Message) -> i32 + Send>),
+    Message(Box<dyn Fn(Message) + Send>),
+    TwinUpdate(Box<dyn Fn(Message) + Send>),
+    DirectMethod(Box<dyn Fn(String, Message) -> i32 + Send>),
 }
 
 /// Start receive async loop as task that will send received messages from the cloud onto mpsc
@@ -169,9 +169,9 @@ async fn receive<S>(
         tokio::select! {
             Some(handler) = receiver.recv() => {
               match handler {
-                MessageHandler::MessageHandler(msg_handler) => message_handler = Some(msg_handler),
-                MessageHandler::TwinUpdateHandler(msg_handler) => twin_handler = Some(msg_handler),
-                MessageHandler::DirectMethodHandler(msg_handler) => method_handler = Some(msg_handler),
+                MessageHandler::Message(msg_handler) => message_handler = Some(msg_handler),
+                MessageHandler::TwinUpdate(msg_handler) => twin_handler = Some(msg_handler),
+                MessageHandler::DirectMethod(msg_handler) => method_handler = Some(msg_handler),
               }
             }
             Ok(packet) = VariablePacket::parse(&mut read_socket) => {
@@ -341,22 +341,22 @@ impl Transport for MqttTransport {
         // TODO: figure out how to do self.handler_tx.send and then match on enum type after for subscription
         // to reduce duplication here
         match handler {
-            MessageHandler::MessageHandler(_) => {
-                if let Err(_) = self.handler_tx.send(handler).await {
+            MessageHandler::Message(_) => {
+                if self.handler_tx.send(handler).await.is_err() {
                     error!("Failed to set message handler");
                     return;
                 }
                 self.subscribe_to_c2d_messages(device_id).await
             }
-            MessageHandler::DirectMethodHandler(_) => {
-                if let Err(_) = self.handler_tx.send(handler).await {
+            MessageHandler::DirectMethod(_) => {
+                if self.handler_tx.send(handler).await.is_err() {
                     error!("Failed to set message handler");
                     return;
                 }
                 self.subscribe_to_direct_methods().await
             }
-            MessageHandler::TwinUpdateHandler(_) => {
-                if let Err(_) = self.handler_tx.send(handler).await {
+            MessageHandler::TwinUpdate(_) => {
+                if self.handler_tx.send(handler).await.is_err() {
                     error!("Failed to set message handler");
                     return;
                 }
