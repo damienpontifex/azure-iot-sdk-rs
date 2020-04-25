@@ -317,6 +317,27 @@ impl IoTHubClient {
             None
         }
     }
+
+    #[cfg(feature = "c2d-message")]
+    pub fn on_message<T>(&self, handler: T)
+    where
+        T: Fn(Message),
+    {
+    }
+
+    #[cfg(feature = "direct-methods")]
+    pub fn on_direct_method<T>(&self, handler: T)
+    where
+        T: Fn(String, Message) -> i32,
+    {
+    }
+
+    #[cfg(feature = "twin-properties")]
+    pub fn on_twin_update<T>(&self, handler: T)
+    where
+        T: Fn(Message),
+    {
+    }
 }
 
 async fn ping(interval: u16, mut sender: Sender<SendType>) {
