@@ -1,18 +1,9 @@
-use crate::message::{DirectMethodInvokation, Message, MessageType, SendType};
+use crate::message::{Message, MessageType, SendType};
 use crate::mqtt_transport::MqttTransport;
 
 use chrono::{Duration, Utc};
 
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpStream;
-use tokio::sync::mpsc::{channel, Receiver, Sender};
-use tokio::time;
-use tokio_tls::{TlsConnector, TlsStream};
-
-use mqtt::control::variable_header::ConnectReturnCode;
-use mqtt::packet::*;
-use mqtt::{Encodable, QualityOfService};
-use mqtt::{TopicFilter, TopicName};
+use tokio::sync::mpsc::{Receiver, Sender};
 
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
@@ -20,11 +11,6 @@ use sha2::Sha256;
 const DEVICEID_KEY: &str = "DeviceId";
 const HOSTNAME_KEY: &str = "HostName";
 const SHAREDACCESSKEY_KEY: &str = "SharedAccessKey";
-const KEEP_ALIVE: u16 = 10;
-
-const DIRECT_METHOD_TOPIC_PREFIX: &str = "$iothub/methods/POST/";
-const REQUEST_ID_PARAM: &str = "$rid=";
-const TWIN_TOPIC_PREFIX: &str = "$iothub/twin/";
 
 #[derive(Debug)]
 pub struct IoTHubClient {
@@ -268,35 +254,26 @@ impl IoTHubClient {
         }
     }
 
-    #[cfg(feature = "c2d-message")]
-    pub fn on_message<T>(&self, handler: T)
-    where
-        T: Fn(Message),
-    {
-    }
+    // #[cfg(feature = "c2d-message")]
+    // pub fn on_message<T>(&self, handler: T)
+    // where
+    //     T: Fn(Message),
+    // {
+    // }
 
-    #[cfg(feature = "direct-methods")]
-    pub fn on_direct_method<T>(&self, handler: T)
-    where
-        T: Fn(String, Message) -> i32,
-    {
-    }
+    // #[cfg(feature = "direct-methods")]
+    // pub fn on_direct_method<T>(&self, handler: T)
+    // where
+    //     T: Fn(String, Message) -> i32,
+    // {
+    // }
 
-    #[cfg(feature = "twin-properties")]
-    pub fn on_twin_update<T>(&self, handler: T)
-    where
-        T: Fn(Message),
-    {
-    }
-}
-
-async fn ping(interval: u16, mut sender: Sender<SendType>) {
-    let mut ping_interval = time::interval(time::Duration::from_secs(interval.into()));
-    loop {
-        ping_interval.tick().await;
-
-        sender.send(SendType::Ping).await.unwrap();
-    }
+    // #[cfg(feature = "twin-properties")]
+    // pub fn on_twin_update<T>(&self, handler: T)
+    // where
+    //     T: Fn(Message),
+    // {
+    // }
 }
 
 #[cfg(test)]
