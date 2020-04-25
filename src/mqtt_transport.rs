@@ -1,4 +1,6 @@
-use crate::message::{DirectMethodInvokation, Message, MessageType, SendType};
+use crate::message::{
+    DirectMethodInvokation, DirectMethodResponse, Message, MessageType, SendType,
+};
 // use chrono::{Duration, Utc};
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -15,7 +17,7 @@ use mqtt::{TopicFilter, TopicName};
 const KEEP_ALIVE: u16 = 10;
 const DIRECT_METHOD_TOPIC_PREFIX: &str = "$iothub/methods/POST/";
 const TWIN_TOPIC_PREFIX: &str = "$iothub/twin/";
-const REQUEST_ID_PARAM: &str = "$rid=";
+const REQUEST_ID_PARAM: &str = "?$rid=";
 
 fn receive_topic_prefix(device_id: &str) -> String {
     format!("devices/{}/messages/devicebound/", device_id)
@@ -200,20 +202,23 @@ pub(crate) enum MessageHandler {
 async fn receive<S>(
     mut read_socket: S,
     device_id: String,
-    mut sender: Sender<MessageType>,
+    mut sender: Sender<SendType>,
     mut receiver: Receiver<MessageHandler>,
 ) where
     S: AsyncReadExt + Unpin,
 {
     let rx_topic_prefix = receive_topic_prefix(&device_id);
     let mut message_handler: Option<Box<dyn Fn(Message) + Send>> = None;
+    let mut twin_handler: Option<Box<dyn Fn(Message) + Send>> = None;
+    let mut method_handler: Option<Box<dyn Fn(String, Message) -> i32 + Send>> = None;
 
     loop {
         tokio::select! {
             Some(handler) = receiver.recv() => {
               match handler {
                 MessageHandler::MessageHandler(msg_handler) => message_handler = Some(msg_handler),
-                _ => println!("Unhandled")
+                MessageHandler::TwinUpdateHandler(msg_handler) => twin_handler = Some(msg_handler),
+                MessageHandler::DirectMethodHandler(msg_handler) => method_handler = Some(msg_handler),
               }
             }
             Ok(packet) = VariablePacket::parse(&mut read_socket) => {
@@ -252,10 +257,13 @@ async fn receive<S>(
                         }
                         // sender.send(MessageType::C2DMessage(message)).await.unwrap();
                     } else if publ.topic_name().starts_with(TWIN_TOPIC_PREFIX) {
-                        sender
-                            .send(MessageType::DesiredPropertyUpdate(message))
-                            .await
-                            .unwrap();
+                      if let Some(twin_handler) = &twin_handler {
+                        twin_handler(message);
+                      }
+                        // sender
+                        //     .send(MessageType::DesiredPropertyUpdate(message))
+                        //     .await
+                        //     .unwrap();
                     } else if publ.topic_name().starts_with(DIRECT_METHOD_TOPIC_PREFIX) {
                         // Sent to topic in format $iothub/methods/POST/{method name}/?$rid={request id}
 
@@ -264,14 +272,25 @@ async fn receive<S>(
 
                         let method_components: Vec<_> = details.split('/').collect();
 
-                        sender
-                            .send(MessageType::DirectMethod(DirectMethodInvokation {
-                                method_name: method_components[0].to_string(),
-                                message,
-                                request_id: method_components[1][REQUEST_ID_PARAM.len()..].to_string(),
-                            }))
-                            .await
-                            .unwrap();
+                        // If we don't have a handler respond with -1
+                        let mut method_response = -1;
+
+                        if let Some(method_handler) = &method_handler {
+                          method_response = method_handler(method_components[0].to_string(), message);
+                        }
+
+                        let request_id = method_components[1][REQUEST_ID_PARAM.len()..].to_string();
+                        let to_respond_with = SendType::RespondToDirectMethod(DirectMethodResponse::new(request_id, method_response, None));
+                        sender.send(to_respond_with).await.unwrap();
+
+                        // sender
+                        //     .send(MessageType::DirectMethod(DirectMethodInvokation {
+                        //         method_name: method_components[0].to_string(),
+                        //         message,
+                        //         request_id: method_components[1][REQUEST_ID_PARAM.len()..].to_string(),
+                        //     }))
+                        //     .await
+                        //     .unwrap();
 
                         // TODO: provide tokio::sync::oneshot to respond to direct method on
                     }
@@ -296,7 +315,7 @@ async fn ping(interval: u16, mut sender: Sender<SendType>) {
 pub(crate) struct MqttTransport {
     pub(crate) handler_tx: Sender<MessageHandler>,
     pub(crate) d2c_sender: Sender<SendType>,
-    pub(crate) c2d_receiver: Option<Receiver<MessageType>>,
+    // pub(crate) c2d_receiver: Option<Receiver<MessageType>>,
 }
 
 impl MqttTransport {
@@ -333,7 +352,7 @@ impl MqttTransport {
             Err(err) => panic!("Error decoding connack packet {:?}", err),
         }
 
-        let (read_socket, mut write_socket) = tokio::io::split(socket);
+        let (read_socket, write_socket) = tokio::io::split(socket);
 
         if cfg!(feature = "direct-methods")
             || cfg!(feature = "twin-properties")
@@ -356,15 +375,21 @@ impl MqttTransport {
 
         tokio::spawn(ping(KEEP_ALIVE / 2, d2c_sender.clone()));
 
-        let mut c2d_receiver: Option<Receiver<MessageType>> = None;
+        // let mut c2d_receiver: Option<Receiver<MessageType>> = None;
         let (handler_tx, handler_rx) = channel::<MessageHandler>(3);
         if cfg!(feature = "direct-methods")
             || cfg!(feature = "twin-properties")
             || cfg!(feature = "c2d-messages")
         {
-            let (tx, rx) = channel::<MessageType>(100);
-            tokio::spawn(receive(read_socket, device_id.to_owned(), tx, handler_rx));
-            c2d_receiver = Some(rx);
+            // let (tx, rx) = channel::<MessageType>(100);
+            let sender = d2c_sender.clone();
+            tokio::spawn(receive(
+                read_socket,
+                device_id.to_owned(),
+                sender,
+                handler_rx,
+            ));
+            // c2d_receiver = Some(rx);
         }
 
         #[cfg(feature = "twin-properties")]
@@ -379,7 +404,7 @@ impl MqttTransport {
         Self {
             handler_tx,
             d2c_sender,
-            c2d_receiver,
+            // c2d_receiver,
         }
     }
 
@@ -395,6 +420,17 @@ impl MqttTransport {
         self.d2c_sender
             .send(SendType::Subscribe(
                 TopicFilter::new(format!("{}#", receive_topic_prefix(device_id))).unwrap(),
+                QualityOfService::Level0,
+            ))
+            .await
+            .unwrap();
+    }
+
+    #[cfg(feature = "direct-methods")]
+    pub(crate) async fn subscribe_to_direct_methods(&mut self) {
+        self.d2c_sender
+            .send(SendType::Subscribe(
+                TopicFilter::new(format!("{}#", DIRECT_METHOD_TOPIC_PREFIX)).unwrap(),
                 QualityOfService::Level0,
             ))
             .await

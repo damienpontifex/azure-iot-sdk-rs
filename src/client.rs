@@ -204,13 +204,13 @@ impl IoTHubClient {
     /// }
     /// ```
 
-    pub fn get_receiver(&mut self) -> Option<Receiver<MessageType>> {
-        if self.transport.c2d_receiver.is_some() {
-            Some(std::mem::replace(&mut self.transport.c2d_receiver, None).unwrap())
-        } else {
-            None
-        }
-    }
+    // pub fn get_receiver(&mut self) -> Option<Receiver<MessageType>> {
+    //     if self.transport.c2d_receiver.is_some() {
+    //         Some(std::mem::replace(&mut self.transport.c2d_receiver, None).unwrap())
+    //     } else {
+    //         None
+    //     }
+    // }
 
     #[cfg(feature = "c2d-messages")]
     pub async fn on_message<T>(&mut self, handler: T)
@@ -225,12 +225,16 @@ impl IoTHubClient {
             .await;
     }
 
-    // #[cfg(feature = "direct-methods")]
-    // pub fn on_direct_method<T>(&self, handler: T)
-    // where
-    //     T: Fn(String, Message) -> i32,
-    // {
-    // }
+    #[cfg(feature = "direct-methods")]
+    pub async fn on_direct_method<T>(&mut self, handler: T)
+    where
+        T: Fn(String, Message) -> i32 + Send + 'static,
+    {
+        let message_handler = MessageHandler::DirectMethodHandler(Box::new(handler));
+        self.transport.handler_tx.send(message_handler).await;
+
+        self.transport.subscribe_to_direct_methods().await;
+    }
 
     // #[cfg(feature = "twin-properties")]
     // pub fn on_twin_update<T>(&self, handler: T)

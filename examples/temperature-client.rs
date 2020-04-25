@@ -70,10 +70,12 @@ async fn main() {
         })
         .await;
 
-    // client.on_direct_method(|method_name, msg| {
-    //     println!("Received direct method invocation for {}", method_name);
-    //     0
-    // });
+    client
+        .on_direct_method(|method_name, msg| {
+            println!("Received direct method {}", method_name);
+            0
+        })
+        .await;
 
     // let mut rx = client.get_receiver().unwrap();
     // let mut tx = client.sender();
