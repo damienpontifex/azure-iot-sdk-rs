@@ -1,6 +1,9 @@
 use serde::Serialize;
 use std::collections::HashMap;
 
+use mqtt::QualityOfService;
+use mqtt::TopicFilter;
+
 /// Type of message received in cloud to device communication
 #[derive(Debug)]
 pub enum MessageType {
@@ -33,6 +36,7 @@ pub enum SendType {
     Ping,
     RespondToDirectMethod(DirectMethodResponse),
     RequestTwinProperties(String),
+    Subscribe(TopicFilter, QualityOfService),
 }
 
 // System properties that are user settable

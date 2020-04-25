@@ -1,9 +1,9 @@
-use crate::message::{Message, MessageType, SendType};
-use crate::mqtt_transport::MqttTransport;
+use crate::message::{Message, MessageType};
+use crate::mqtt_transport::{MessageHandler, MqttTransport};
 
 use chrono::{Duration, Utc};
 
-use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::sync::mpsc::Receiver;
 
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
@@ -16,8 +16,6 @@ const SHAREDACCESSKEY_KEY: &str = "SharedAccessKey";
 pub struct IoTHubClient {
     device_id: String,
     transport: MqttTransport,
-    // d2c_sender: Sender<SendType>,
-    // c2d_receiver: Option<Receiver<MessageType>>,
 }
 
 fn generate_sas(hub: &str, device_id: &str, key: &str, expiry_timestamp: i64) -> String {
@@ -179,46 +177,6 @@ impl IoTHubClient {
         self.transport.send_message(message).await;
     }
 
-    /// Gets a new Sender channel that is paired with the hub device to
-    /// cloud send functionality
-    ///
-    /// #Example
-    /// ```no_run
-    /// use azure_iot_sdk::client::IoTHubClient;
-    /// use azure_iot_sdk::message::{Message, SendType};
-    /// use tokio::time;
-    ///
-    /// #[tokio::main]
-    /// async fn main() {
-    ///     let mut client = IoTHubClient::with_device_key(
-    ///         "iothubname.azure-devices.net".into(),
-    ///         "MyDeviceId".into(),
-    ///         "TheAccessKey".into()).await;
-    ///
-    ///     let mut interval = time::interval(time::Duration::from_secs(1));
-    ///     let mut count: u32 = 0;
-    ///     let mut tx = client.sender();
-    ///
-    ///     loop {
-    ///         interval.tick().await;
-    ///
-    ///         let msg = Message::builder()
-    ///             .set_body_from(format!("Message #{}", count))
-    ///             .set_message_id(format!("{}-t", count))
-    ///             .build();
-    ///
-    ///         tx.send(SendType::Message(msg))
-    ///             .await
-    ///             .unwrap();
-    ///
-    ///         count += 1;
-    ///     }
-    /// }
-    /// ```
-    pub fn sender(&self) -> Sender<SendType> {
-        self.transport.d2c_sender.clone()
-    }
-
     /// Get the receiver channel where cloud to device messages will be sent to.
     /// This can only be retrieved once as the receive side of the channel is a to
     /// one operation. If the receiver has been retrieved already, `None` will be returned
@@ -254,12 +212,18 @@ impl IoTHubClient {
         }
     }
 
-    // #[cfg(feature = "c2d-message")]
-    // pub fn on_message<T>(&self, handler: T)
-    // where
-    //     T: Fn(Message),
-    // {
-    // }
+    #[cfg(feature = "c2d-messages")]
+    pub async fn on_message<T>(&mut self, handler: T)
+    where
+        T: Fn(Message) + Send + 'static,
+    {
+        let message_handler = MessageHandler::MessageHandler(Box::new(handler));
+        self.transport.handler_tx.send(message_handler).await;
+
+        self.transport
+            .subscribe_to_c2d_messages(&self.device_id)
+            .await;
+    }
 
     // #[cfg(feature = "direct-methods")]
     // pub fn on_direct_method<T>(&self, handler: T)

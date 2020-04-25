@@ -172,8 +172,22 @@ where
                 packet.encode(&mut buf).unwrap();
                 write_socket.write_all(&buf[..]).await.unwrap();
             }
+            SendType::Subscribe(topic_filter, qos) => {
+                let topics = vec![(topic_filter, qos)];
+
+                let subscribe_packet = SubscribePacket::new(10, topics);
+                let mut buf = Vec::new();
+                subscribe_packet.encode(&mut buf).unwrap();
+                write_socket.write_all(&buf[..]).await.unwrap();
+            }
         }
     }
+}
+
+pub(crate) enum MessageHandler {
+    MessageHandler(Box<dyn Fn(Message) + Send>),
+    TwinUpdateHandler(Box<dyn Fn(Message) + Send>),
+    DirectMethodHandler(Box<dyn Fn(String, Message) -> i32 + Send>),
 }
 
 /// Start receive async loop as task that will send received messages from the cloud onto mpsc
@@ -183,81 +197,88 @@ where
 /// * `read_socket` -
 /// * `device_id` -
 /// * `sender` -
-async fn receive<S>(mut read_socket: S, device_id: String, mut sender: Sender<MessageType>)
-where
+async fn receive<S>(
+    mut read_socket: S,
+    device_id: String,
+    mut sender: Sender<MessageType>,
+    mut receiver: Receiver<MessageHandler>,
+) where
     S: AsyncReadExt + Unpin,
 {
     let rx_topic_prefix = receive_topic_prefix(&device_id);
+    let mut message_handler: Option<Box<dyn Fn(Message) + Send>> = None;
+
     loop {
-        let packet = match VariablePacket::parse(&mut read_socket).await {
-            Ok(pk) => pk,
-            Err(VariablePacketError::IoError(err)) => {
-                error!("IO {:?}", err);
-                continue;
+        tokio::select! {
+            Some(handler) = receiver.recv() => {
+              match handler {
+                MessageHandler::MessageHandler(msg_handler) => message_handler = Some(msg_handler),
+                _ => println!("Unhandled")
+              }
             }
-            Err(err) => {
-                error!("Error in receiving packet {}, {}", err, type_of(&err));
-                continue;
-            }
-        };
-        trace!("PACKET {:?}", packet);
-
-        match packet {
-            VariablePacket::PingrespPacket(..) => {
-                info!("Receiving PINGRESP from broker ..");
-            }
-            VariablePacket::PublishPacket(ref publ) => {
-                let msg = match std::str::from_utf8(&publ.payload_ref()[..]) {
-                    Ok(msg) => msg,
-                    Err(err) => {
-                        error!("Failed to decode publish message {:?}", err);
-                        continue;
-                    }
-                };
-                let mut message = Message::new(msg.to_owned());
-                info!("PUBLISH ({}): {:?}", publ.topic_name(), message);
-
-                if publ.topic_name().starts_with(&rx_topic_prefix) {
-                    let properties = publ.topic_name().trim_start_matches(&rx_topic_prefix);
-                    let property_tuples =
-                        serde_urlencoded::from_str::<Vec<(String, String)>>(properties).unwrap();
-                    for (key, value) in property_tuples {
-                        // We have properties after the topic path
-                        if key.starts_with("$.") {
-                            message
-                                .system_properties
-                                .insert(key[2..].to_string(), value);
-                        } else {
-                            message.properties.insert(key, value);
-                        }
-                    }
-                    sender.send(MessageType::C2DMessage(message)).await.unwrap();
-                } else if publ.topic_name().starts_with(TWIN_TOPIC_PREFIX) {
-                    sender
-                        .send(MessageType::DesiredPropertyUpdate(message))
-                        .await
-                        .unwrap();
-                } else if publ.topic_name().starts_with(DIRECT_METHOD_TOPIC_PREFIX) {
-                    // Sent to topic in format $iothub/methods/POST/{method name}/?$rid={request id}
-
-                    // Strip the prefix from the topic left with {method name}/$rid={request id}
-                    let details = &publ.topic_name()[DIRECT_METHOD_TOPIC_PREFIX.len()..];
-
-                    let method_components: Vec<_> = details.split('/').collect();
-
-                    sender
-                        .send(MessageType::DirectMethod(DirectMethodInvokation {
-                            method_name: method_components[0].to_string(),
-                            message,
-                            request_id: method_components[1][REQUEST_ID_PARAM.len()..].to_string(),
-                        }))
-                        .await
-                        .unwrap();
-
-                    // TODO: provide tokio::sync::oneshot to respond to direct method on
+            Ok(packet) = VariablePacket::parse(&mut read_socket) => {
+              trace!("PACKET {:?}", packet);
+              match packet {
+                VariablePacket::PingrespPacket(..) => {
+                    info!("Receiving PINGRESP from broker ..");
                 }
+                VariablePacket::PublishPacket(ref publ) => {
+                    let msg = match std::str::from_utf8(&publ.payload_ref()[..]) {
+                        Ok(msg) => msg,
+                        Err(err) => {
+                            error!("Failed to decode publish message {:?}", err);
+                            continue;
+                        }
+                    };
+                    let mut message = Message::new(msg.to_owned());
+                    info!("PUBLISH ({}): {:?}", publ.topic_name(), message);
+
+                    if publ.topic_name().starts_with(&rx_topic_prefix) {
+                        let properties = publ.topic_name().trim_start_matches(&rx_topic_prefix);
+                        let property_tuples =
+                            serde_urlencoded::from_str::<Vec<(String, String)>>(properties).unwrap();
+                        for (key, value) in property_tuples {
+                            // We have properties after the topic path
+                            if key.starts_with("$.") {
+                                message
+                                    .system_properties
+                                    .insert(key[2..].to_string(), value);
+                            } else {
+                                message.properties.insert(key, value);
+                            }
+                        }
+                        if let Some(msg_handler) = &message_handler {
+                          msg_handler(message);
+                        }
+                        // sender.send(MessageType::C2DMessage(message)).await.unwrap();
+                    } else if publ.topic_name().starts_with(TWIN_TOPIC_PREFIX) {
+                        sender
+                            .send(MessageType::DesiredPropertyUpdate(message))
+                            .await
+                            .unwrap();
+                    } else if publ.topic_name().starts_with(DIRECT_METHOD_TOPIC_PREFIX) {
+                        // Sent to topic in format $iothub/methods/POST/{method name}/?$rid={request id}
+
+                        // Strip the prefix from the topic left with {method name}/$rid={request id}
+                        let details = &publ.topic_name()[DIRECT_METHOD_TOPIC_PREFIX.len()..];
+
+                        let method_components: Vec<_> = details.split('/').collect();
+
+                        sender
+                            .send(MessageType::DirectMethod(DirectMethodInvokation {
+                                method_name: method_components[0].to_string(),
+                                message,
+                                request_id: method_components[1][REQUEST_ID_PARAM.len()..].to_string(),
+                            }))
+                            .await
+                            .unwrap();
+
+                        // TODO: provide tokio::sync::oneshot to respond to direct method on
+                    }
+                }
+                _ => {}
+              }
             }
-            _ => {}
         }
     }
 }
@@ -273,6 +294,7 @@ async fn ping(interval: u16, mut sender: Sender<SendType>) {
 
 #[derive(Debug)]
 pub(crate) struct MqttTransport {
+    pub(crate) handler_tx: Sender<MessageHandler>,
     pub(crate) d2c_sender: Sender<SendType>,
     pub(crate) c2d_receiver: Option<Receiver<MessageType>>,
 }
@@ -320,7 +342,7 @@ impl MqttTransport {
             // Only send subscriptions and start receiver tasks if client is interested
             // in subscribing to any of these capabilities
 
-            subscribe(&mut write_socket, &device_id).await;
+            // subscribe(&mut write_socket, &device_id).await;
         } else {
             debug!("Skipping topic subscribe as no features enabled");
         }
@@ -335,12 +357,13 @@ impl MqttTransport {
         tokio::spawn(ping(KEEP_ALIVE / 2, d2c_sender.clone()));
 
         let mut c2d_receiver: Option<Receiver<MessageType>> = None;
+        let (handler_tx, handler_rx) = channel::<MessageHandler>(3);
         if cfg!(feature = "direct-methods")
             || cfg!(feature = "twin-properties")
             || cfg!(feature = "c2d-messages")
         {
             let (tx, rx) = channel::<MessageType>(100);
-            tokio::spawn(receive(read_socket, device_id.to_owned(), tx));
+            tokio::spawn(receive(read_socket, device_id.to_owned(), tx, handler_rx));
             c2d_receiver = Some(rx);
         }
 
@@ -354,6 +377,7 @@ impl MqttTransport {
         }
 
         Self {
+            handler_tx,
             d2c_sender,
             c2d_receiver,
         }
@@ -362,6 +386,17 @@ impl MqttTransport {
     pub(crate) async fn send_message(&mut self, message: Message) {
         self.d2c_sender
             .send(SendType::Message(message))
+            .await
+            .unwrap();
+    }
+
+    #[cfg(feature = "c2d-messages")]
+    pub(crate) async fn subscribe_to_c2d_messages(&mut self, device_id: &str) {
+        self.d2c_sender
+            .send(SendType::Subscribe(
+                TopicFilter::new(format!("{}#", receive_topic_prefix(device_id))).unwrap(),
+                QualityOfService::Level0,
+            ))
             .await
             .unwrap();
     }

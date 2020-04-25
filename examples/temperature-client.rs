@@ -64,38 +64,40 @@ async fn main() {
 
     info!("Initialized client");
 
-    // client.on_message(|msg| {
-    //     println!("Received message");
-    // });
+    client
+        .on_message(|msg| {
+            println!("Received message {:?}", msg);
+        })
+        .await;
 
     // client.on_direct_method(|method_name, msg| {
     //     println!("Received direct method invocation for {}", method_name);
     //     0
     // });
 
-    let mut rx = client.get_receiver().unwrap();
-    let mut tx = client.sender();
-    let receiver = async move {
-        while let Some(msg) = rx.recv().await {
-            match msg {
-                MessageType::C2DMessage(message) => info!("Received message {:?}", message),
-                MessageType::DirectMethod(direct_method) => {
-                    info!("Received direct method {:?}", direct_method);
-                    tx.send(SendType::RespondToDirectMethod(DirectMethodResponse::new(
-                        direct_method.request_id,
-                        0,
-                        Some("{'responseKey': 1}".into()),
-                    )))
-                    .await
-                    .unwrap();
-                }
-                MessageType::DesiredPropertyUpdate(property_update) => {
-                    let json: serde_json::Value = property_update.into();
-                    info!("Received property update {:?}", json);
-                }
-            }
-        }
-    };
+    // let mut rx = client.get_receiver().unwrap();
+    // let mut tx = client.sender();
+    // let receiver = async move {
+    //     while let Some(msg) = rx.recv().await {
+    //         match msg {
+    //             MessageType::C2DMessage(message) => info!("Received message {:?}", message),
+    //             MessageType::DirectMethod(direct_method) => {
+    //                 info!("Received direct method {:?}", direct_method);
+    //                 tx.send(SendType::RespondToDirectMethod(DirectMethodResponse::new(
+    //                     direct_method.request_id,
+    //                     0,
+    //                     Some("{'responseKey': 1}".into()),
+    //                 )))
+    //                 .await
+    //                 .unwrap();
+    //             }
+    //             MessageType::DesiredPropertyUpdate(property_update) => {
+    //                 let json: serde_json::Value = property_update.into();
+    //                 info!("Received property update {:?}", json);
+    //             }
+    //         }
+    //     }
+    // };
 
     let mut interval = time::interval(time::Duration::from_secs(1));
     let mut count = 0u32;
@@ -118,5 +120,5 @@ async fn main() {
         }
     };
 
-    futures::join!(sender, receiver);
+    futures::join!(sender);
 }
