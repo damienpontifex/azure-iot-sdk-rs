@@ -39,7 +39,7 @@
 //!         interval.tick().await;
 //!
 //!         let msg = Message::builder()
-//!             .set_body_from(format!("Message #{}", count))
+//!             .set_body(format!("Message #{}", count).as_bytes().to_vec())
 //!             .set_message_id(format!("{}-t", count))
 //!             .build();
 //!

@@ -162,7 +162,7 @@ impl IoTHubClient {
     ///         interval.tick().await;
     ///
     ///         let msg = Message::builder()
-    ///             .set_body_from(format!("Message #{}", count))
+    ///             .set_body(format!("Message #{}", count).as_bytes().to_vec())
     ///             .set_message_id(format!("{}-t", count))
     ///             .build();
     ///
@@ -221,7 +221,7 @@ impl IoTHubClient {
     ///
     ///     client
     ///        .on_direct_method(|method_name, msg| {
-    ///             println!("Received direct method {} {}", method_name, msg.body);
+    ///             println!("Received direct method {} {}", method_name, std::str::from_utf8(&msg.body).unwrap());
     ///             0
     ///         })
     ///         .await;
