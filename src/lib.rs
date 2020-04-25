@@ -16,7 +16,7 @@
 //! If not all features are required, disable the default features and add only desired.
 //!
 //! ```toml
-//! azure_iot_sdk = { version = "0.2.0", features = [], default-features = false }
+//! azure_iot_sdk = { version = "0.3.0", features = [], default-features = false }
 //! ```
 //!
 //! # Examples
