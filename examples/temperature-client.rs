@@ -64,14 +64,14 @@ async fn main() {
 
     info!("Initialized client");
 
-    client.on_message(|msg| {
-        println!("Received message");
-    });
+    // client.on_message(|msg| {
+    //     println!("Received message");
+    // });
 
-    client.on_direct_method(|method_name, msg| {
-        println!("Received direct method invocation for {}", method_name);
-        0
-    });
+    // client.on_direct_method(|method_name, msg| {
+    //     println!("Received direct method invocation for {}", method_name);
+    //     0
+    // });
 
     let mut rx = client.get_receiver().unwrap();
     let mut tx = client.sender();

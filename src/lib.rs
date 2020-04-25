@@ -50,6 +50,8 @@
 //! }
 //! ```
 
+// #![warn(missing_debug_implementations, rust_2018_idioms, missing_docs)]
+
 #[macro_use]
 extern crate log;
 
@@ -58,3 +60,4 @@ pub const SDK_VERSION: &str = std::env!("CARGO_PKG_VERSION");
 
 pub mod client;
 pub mod message;
+pub(crate) mod mqtt_transport;
