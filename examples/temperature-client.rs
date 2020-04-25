@@ -3,6 +3,7 @@ extern crate log;
 
 use azure_iot_sdk::{client::IoTHubClient, message::Message};
 
+use chrono::{DateTime, Utc};
 use tokio::time;
 
 use serde::{Deserialize, Serialize};
@@ -26,6 +27,7 @@ impl DeviceConfig {
 
 #[derive(Serialize, Debug)]
 struct TemperatureReading {
+    timestamp: DateTime<Utc>,
     temperature: f32,
 }
 
@@ -42,6 +44,7 @@ impl TemperatureSensor {
 
     fn get_reading(&self) -> TemperatureReading {
         TemperatureReading {
+            timestamp: Utc::now(),
             temperature: self.distribution.sample(&mut rand::thread_rng()),
         }
     }
@@ -49,6 +52,7 @@ impl TemperatureSensor {
 
 #[derive(Serialize, Debug)]
 struct HumidityReading {
+    timestamp: DateTime<Utc>,
     humidity: f32,
 }
 
@@ -65,6 +69,7 @@ impl HumiditySensor {
 
     fn get_reading(&self) -> HumidityReading {
         HumidityReading {
+            timestamp: Utc::now(),
             humidity: self.distribution.sample(&mut rand::thread_rng()),
         }
     }

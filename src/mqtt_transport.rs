@@ -13,14 +13,33 @@ use mqtt::packet::*;
 use mqtt::{Encodable, QualityOfService};
 use mqtt::{TopicFilter, TopicName};
 
-const KEEP_ALIVE: u16 = 10;
-const DIRECT_METHOD_TOPIC_PREFIX: &str = "$iothub/methods/POST/";
-const TWIN_TOPIC_PREFIX: &str = "$iothub/twin/";
-const REQUEST_ID_PARAM: &str = "?$rid=";
+// Incoming topic names
+const METHOD_POST_TOPIC_FILTER: &str = "$iothub/methods/POST/#";
+const METHOD_POST_TOPIC_PREFIX: &str = "$iothub/methods/POST/";
+const TWIN_RESPONSE_TOPIC_FILTER: &str = "$iothub/twin/res/#";
+// const TWIN_RESPONSE_TOPIC_PREFIX: &str = "$iothub/twin/res/";
+const TWIN_PATCH_TOPIC_FILTER: &str = "$iothub/twin/PATCH/properties/desired/#";
+const TWIN_PATCH_TOPIC_PREFIX: &str = "$iothub/twin/PATCH/properties/desired/";
 
-fn receive_topic_prefix(device_id: &str) -> String {
+// Outgoing topic names
+fn method_response_topic(status: i32, request_id: &str) -> String {
+    format!("$iothub/methods/res/{}/?$rid={}", status, request_id)
+}
+fn twin_get_topic(request_id: &str) -> String {
+    format!("$iothub/twin/GET/?$rid={}", request_id)
+}
+fn device_bound_messages_topic_filter(device_id: &str) -> String {
+    format!("devices/{}/messages/devicebound/#", device_id)
+}
+fn device_bound_messages_topic_prefix(device_id: &str) -> String {
     format!("devices/{}/messages/devicebound/", device_id)
 }
+fn cloud_bound_messages_topic(device_id: &str) -> String {
+    format!("devices/{}/messages/events/", device_id)
+}
+
+const KEEP_ALIVE: u16 = 10;
+const REQUEST_ID_PARAM: &str = "?$rid=";
 
 #[async_trait]
 pub(crate) trait Transport {
@@ -71,7 +90,7 @@ async fn create_sender<S>(mut write_socket: S, device_id: String, mut receiver: 
 where
     S: AsyncWriteExt + Unpin,
 {
-    let send_topic = TopicName::new(format!("devices/{}/messages/events/", device_id)).unwrap();
+    let send_topic = TopicName::new(cloud_bound_messages_topic(&device_id)).unwrap();
     while let Some(sent) = receiver.recv().await {
         match sent {
             SendType::Message(message) => {
@@ -102,11 +121,8 @@ where
                     response.request_id
                 );
                 let publish_packet = PublishPacket::new(
-                    TopicName::new(format!(
-                        "$iothub/methods/res/{}/?$rid={}",
-                        response.status, response.request_id
-                    ))
-                    .unwrap(),
+                    TopicName::new(method_response_topic(response.status, &response.request_id))
+                        .unwrap(),
                     QoSWithPacketIdentifier::Level0,
                     response.body,
                 );
@@ -120,8 +136,7 @@ where
                     request_id
                 );
                 let packet = PublishPacket::new(
-                    TopicName::new(format!("{}GET/?$rid={}", TWIN_TOPIC_PREFIX, request_id))
-                        .unwrap(),
+                    TopicName::new(twin_get_topic(&request_id)).unwrap(),
                     QoSWithPacketIdentifier::Level0,
                     "".as_bytes(),
                 );
@@ -160,7 +175,7 @@ async fn receive<S>(
 ) where
     S: AsyncReadExt + Unpin,
 {
-    let rx_topic_prefix = receive_topic_prefix(&device_id);
+    let rx_topic_prefix = device_bound_messages_topic_prefix(&device_id);
     let mut message_handler: Option<Box<dyn Fn(Message) + Send>> = None;
     let mut twin_handler: Option<Box<dyn Fn(Message) + Send>> = None;
     let mut method_handler: Option<Box<dyn Fn(String, Message) -> i32 + Send>> = None;
@@ -168,6 +183,7 @@ async fn receive<S>(
     loop {
         tokio::select! {
             Some(handler) = receiver.recv() => {
+              // Update message handlers if a message received on this channel
               match handler {
                 MessageHandler::Message(msg_handler) => message_handler = Some(msg_handler),
                 MessageHandler::TwinUpdate(msg_handler) => twin_handler = Some(msg_handler),
@@ -175,16 +191,19 @@ async fn receive<S>(
               }
             }
             Ok(packet) = VariablePacket::parse(&mut read_socket) => {
+              // Networking
               trace!("PACKET {:?}", packet);
               match packet {
+                // TODO: handle ping req from server and we should send ping response in return
                 VariablePacket::PingrespPacket(..) => {
                     info!("Receiving PINGRESP from broker ..");
                 }
                 VariablePacket::PublishPacket(ref publ) => {
                     let mut message = Message::new(publ.payload_ref()[..].to_vec());
-                    info!("PUBLISH ({}): {:?}", publ.topic_name(), message);
+                    trace!("PUBLISH ({}): {:?}", publ.topic_name(), message);
 
                     if publ.topic_name().starts_with(&rx_topic_prefix) {
+                        // C2D Message
                         let properties = publ.topic_name().trim_start_matches(&rx_topic_prefix);
                         let property_tuples =
                             serde_urlencoded::from_str::<Vec<(String, String)>>(properties).unwrap();
@@ -201,16 +220,19 @@ async fn receive<S>(
                         if let Some(msg_handler) = &message_handler {
                           msg_handler(message);
                         }
-                        // sender.send(MessageType::C2DMessage(message)).await.unwrap();
-                    } else if publ.topic_name().starts_with(TWIN_TOPIC_PREFIX) {
+
+                    } else if publ.topic_name().starts_with(TWIN_PATCH_TOPIC_PREFIX) {
+                      // Twin update
                       if let Some(twin_handler) = &twin_handler {
                         twin_handler(message);
                       }
-                    } else if publ.topic_name().starts_with(DIRECT_METHOD_TOPIC_PREFIX) {
+
+                    } else if publ.topic_name().starts_with(METHOD_POST_TOPIC_PREFIX) {
+                        // Direct method invocation
                         // Sent to topic in format $iothub/methods/POST/{method name}/?$rid={request id}
 
                         // Strip the prefix from the topic left with {method name}/$rid={request id}
-                        let details = &publ.topic_name()[DIRECT_METHOD_TOPIC_PREFIX.len()..];
+                        let details = &publ.topic_name()[METHOD_POST_TOPIC_PREFIX.len()..];
 
                         let method_components: Vec<_> = details.split('/').collect();
 
@@ -364,7 +386,7 @@ impl MqttTransport {
     async fn subscribe_to_c2d_messages(&mut self, device_id: &str) {
         self.d2c_sender
             .send(SendType::Subscribe(vec![(
-                TopicFilter::new(format!("{}#", receive_topic_prefix(device_id))).unwrap(),
+                TopicFilter::new(device_bound_messages_topic_filter(device_id)).unwrap(),
                 QualityOfService::Level0,
             )]))
             .await
@@ -375,12 +397,11 @@ impl MqttTransport {
     async fn subscribe_to_twin_updates(&mut self) {
         let topics = vec![
             (
-                TopicFilter::new(format!("{}res/#", TWIN_TOPIC_PREFIX)).unwrap(),
+                TopicFilter::new(TWIN_RESPONSE_TOPIC_FILTER).unwrap(),
                 QualityOfService::Level0,
             ),
             (
-                TopicFilter::new(format!("{}PATCH/properties/desired/#", TWIN_TOPIC_PREFIX))
-                    .unwrap(),
+                TopicFilter::new(TWIN_PATCH_TOPIC_FILTER).unwrap(),
                 QualityOfService::Level0,
             ),
         ];
@@ -394,7 +415,7 @@ impl MqttTransport {
     async fn subscribe_to_direct_methods(&mut self) {
         self.d2c_sender
             .send(SendType::Subscribe(vec![(
-                TopicFilter::new(format!("{}#", DIRECT_METHOD_TOPIC_PREFIX)).unwrap(),
+                TopicFilter::new(METHOD_POST_TOPIC_FILTER).unwrap(),
                 QualityOfService::Level0,
             )]))
             .await
