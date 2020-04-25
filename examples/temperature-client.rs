@@ -90,7 +90,11 @@ async fn main() {
 
     client
         .on_direct_method(|method_name, msg| {
-            println!("Received direct method {} {}", method_name, msg.body);
+            println!(
+                "Received direct method {} {}",
+                method_name,
+                std::str::from_utf8(&msg.body).unwrap()
+            );
             0
         })
         .await;
@@ -131,7 +135,7 @@ async fn main() {
             let temp = sensor.get_reading();
 
             let msg = Message::builder()
-                .set_body_from(temp)
+                .set_body(serde_json::to_string(&temp).unwrap().as_bytes().to_vec())
                 .set_message_id(format!("{}-t", count))
                 .build();
 
@@ -149,10 +153,15 @@ async fn main() {
         loop {
             interval.tick().await;
 
-            let temp = sensor.get_reading();
+            let humidity = sensor.get_reading();
 
             let msg = Message::builder()
-                .set_body_from(temp)
+                .set_body(
+                    serde_json::to_string(&humidity)
+                        .unwrap()
+                        .as_bytes()
+                        .to_vec(),
+                )
                 .set_message_id(format!("{}-h", count))
                 .build();
 

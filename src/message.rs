@@ -1,4 +1,3 @@
-use serde::Serialize;
 use std::collections::HashMap;
 
 use mqtt::QualityOfService;
@@ -57,26 +56,18 @@ const MESSAGE_ID: &str = "message-id";
 #[derive(Default, Debug)]
 pub struct Message {
     /// String contents of body of the message
-    pub body: String,
+    pub body: Vec<u8>,
     pub(crate) properties: HashMap<String, String>,
     pub(crate) system_properties: HashMap<String, String>,
 }
 
 impl Message {
     /// Create with contents of body as message bytes
-    pub fn new(body: String) -> Self {
+    pub fn new(body: Vec<u8>) -> Self {
         Self {
             body,
             ..Default::default()
         }
-    }
-
-    /// Create with message body being the JSON serialized contents of `object`
-    pub fn from<T>(object: T) -> Self
-    where
-        T: Serialize,
-    {
-        Self::new(serde_json::to_string(&object).unwrap())
     }
 
     /// Get a builder instance for building up a message
@@ -85,32 +76,17 @@ impl Message {
     }
 }
 
-impl std::convert::Into<serde_json::Value> for Message {
-    fn into(self) -> serde_json::Value {
-        serde_json::from_str(&self.body).unwrap()
-    }
-}
-
 /// Builder for constructing Message instances
 #[derive(Debug, Default)]
 pub struct MessageBuilder {
-    message: Option<String>,
+    message: Option<Vec<u8>>,
     properties: HashMap<String, String>,
     system_properties: HashMap<String, String>,
 }
 impl MessageBuilder {
     /// Set the message body
-    pub fn set_body(mut self, body: String) -> Self {
+    pub fn set_body(mut self, body: Vec<u8>) -> Self {
         self.message = Some(body);
-        self
-    }
-
-    /// Set the message body to be JSON serialized
-    pub fn set_body_from<T>(mut self, object: T) -> Self
-    where
-        T: Serialize,
-    {
-        self.message = Some(serde_json::to_string(&object).unwrap());
         self
     }
 

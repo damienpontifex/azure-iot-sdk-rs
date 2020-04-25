@@ -181,14 +181,7 @@ async fn receive<S>(
                     info!("Receiving PINGRESP from broker ..");
                 }
                 VariablePacket::PublishPacket(ref publ) => {
-                    let msg = match std::str::from_utf8(&publ.payload_ref()[..]) {
-                        Ok(msg) => msg,
-                        Err(err) => {
-                            error!("Failed to decode publish message {:?}", err);
-                            continue;
-                        }
-                    };
-                    let mut message = Message::new(msg.to_owned());
+                    let mut message = Message::new(publ.payload_ref()[..].to_vec());
                     info!("PUBLISH ({}): {:?}", publ.topic_name(), message);
 
                     if publ.topic_name().starts_with(&rx_topic_prefix) {
