@@ -10,7 +10,7 @@ const DEVICEID_KEY: &str = "DeviceId";
 const HOSTNAME_KEY: &str = "HostName";
 const SHAREDACCESSKEY_KEY: &str = "SharedAccessKey";
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct IoTHubClient {
     device_id: String,
     transport: MqttTransport,

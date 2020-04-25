@@ -49,6 +49,29 @@ impl TemperatureSensor {
     }
 }
 
+#[derive(Serialize, Debug)]
+struct HumidityReading {
+    humidity: f32,
+}
+
+struct HumiditySensor {
+    distribution: Normal<f32>,
+}
+
+impl HumiditySensor {
+    fn default() -> Self {
+        Self {
+            distribution: Normal::new(50.0, 7.0).unwrap(),
+        }
+    }
+
+    fn get_reading(&self) -> HumidityReading {
+        HumidityReading {
+            humidity: self.distribution.sample(&mut rand::thread_rng()),
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() {
     env_logger::from_env(env_logger::Env::default().default_filter_or("info")).init();
@@ -98,11 +121,12 @@ async fn main() {
     //     }
     // };
 
-    let mut interval = time::interval(time::Duration::from_secs(1));
+    let mut interval = time::interval(time::Duration::from_secs(2));
     let mut count = 0u32;
     let sensor = TemperatureSensor::default();
 
-    let sender = async move {
+    let mut temp_client = client.clone();
+    let temp_sender = async {
         loop {
             interval.tick().await;
 
@@ -113,11 +137,32 @@ async fn main() {
                 .set_message_id(format!("{}-t", count))
                 .build();
 
+            temp_client.send_message(msg).await;
+
+            count += 1;
+        }
+    };
+
+    let mut interval = time::interval(time::Duration::from_secs(5));
+    let mut count = 0u32;
+    let sensor = HumiditySensor::default();
+
+    let humidity_sender = async move {
+        loop {
+            interval.tick().await;
+
+            let temp = sensor.get_reading();
+
+            let msg = Message::builder()
+                .set_body_from(temp)
+                .set_message_id(format!("{}-h", count))
+                .build();
+
             client.send_message(msg).await;
 
             count += 1;
         }
     };
 
-    futures::join!(sender);
+    futures::join!(temp_sender, humidity_sender);
 }
