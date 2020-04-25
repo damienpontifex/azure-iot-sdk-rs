@@ -92,7 +92,7 @@ async fn main() {
 
     client
         .on_direct_method(|method_name, msg| {
-            println!("Received direct method {}", method_name);
+            println!("Received direct method {} {}", method_name, msg.body);
             0
         })
         .await;

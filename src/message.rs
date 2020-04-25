@@ -46,7 +46,7 @@ const MESSAGE_ID: &str = "message-id";
 /// Message used in body of communication
 #[derive(Default, Debug)]
 pub struct Message {
-    pub(crate) body: String,
+    pub body: String,
     pub(crate) properties: HashMap<String, String>,
     pub(crate) system_properties: HashMap<String, String>,
 }

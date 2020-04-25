@@ -1,5 +1,6 @@
 use crate::message::{DirectMethodResponse, Message, SendType};
-// use chrono::{Duration, Utc};
+
+use async_trait::async_trait;
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
@@ -19,6 +20,13 @@ const REQUEST_ID_PARAM: &str = "?$rid=";
 
 fn receive_topic_prefix(device_id: &str) -> String {
     format!("devices/{}/messages/devicebound/", device_id)
+}
+
+#[async_trait]
+pub(crate) trait Transport {
+    async fn new(hub_name: String, device_id: String, sas: String) -> Self;
+    async fn send_message(&mut self, message: Message);
+    async fn set_message_handler(&mut self, device_id: &str, handler: MessageHandler);
 }
 
 /// Connect to Azure IoT Hub
@@ -247,8 +255,9 @@ pub(crate) struct MqttTransport {
     pub(crate) d2c_sender: Sender<SendType>,
 }
 
-impl MqttTransport {
-    pub(crate) async fn new(hub_name: String, device_id: String, sas: String) -> Self {
+#[async_trait]
+impl Transport for MqttTransport {
+    async fn new(hub_name: String, device_id: String, sas: String) -> Self {
         let mut socket = tcp_connect(&hub_name).await;
 
         let mut conn = ConnectPacket::new("MQTT", &device_id);
@@ -321,15 +330,45 @@ impl MqttTransport {
         }
     }
 
-    pub(crate) async fn send_message(&mut self, message: Message) {
+    async fn send_message(&mut self, message: Message) {
         self.d2c_sender
             .send(SendType::Message(message))
             .await
             .unwrap();
     }
 
+    async fn set_message_handler(&mut self, device_id: &str, handler: MessageHandler) {
+        // TODO: figure out how to do self.handler_tx.send and then match on enum type after for subscription
+        // to reduce duplication here
+        match handler {
+            MessageHandler::MessageHandler(_) => {
+                if let Err(_) = self.handler_tx.send(handler).await {
+                    error!("Failed to set message handler");
+                    return;
+                }
+                self.subscribe_to_c2d_messages(device_id).await
+            }
+            MessageHandler::DirectMethodHandler(_) => {
+                if let Err(_) = self.handler_tx.send(handler).await {
+                    error!("Failed to set message handler");
+                    return;
+                }
+                self.subscribe_to_direct_methods().await
+            }
+            MessageHandler::TwinUpdateHandler(_) => {
+                if let Err(_) = self.handler_tx.send(handler).await {
+                    error!("Failed to set message handler");
+                    return;
+                }
+                self.subscribe_to_twin_updates().await
+            }
+        }
+    }
+}
+
+impl MqttTransport {
     #[cfg(feature = "c2d-messages")]
-    pub(crate) async fn subscribe_to_c2d_messages(&mut self, device_id: &str) {
+    async fn subscribe_to_c2d_messages(&mut self, device_id: &str) {
         self.d2c_sender
             .send(SendType::Subscribe(vec![(
                 TopicFilter::new(format!("{}#", receive_topic_prefix(device_id))).unwrap(),
@@ -340,7 +379,7 @@ impl MqttTransport {
     }
 
     #[cfg(feature = "twin-properties")]
-    pub(crate) async fn subscribe_to_twin_updates(&mut self) {
+    async fn subscribe_to_twin_updates(&mut self) {
         let topics = vec![
             (
                 TopicFilter::new(format!("{}res/#", TWIN_TOPIC_PREFIX)).unwrap(),
@@ -359,7 +398,7 @@ impl MqttTransport {
     }
 
     #[cfg(feature = "direct-methods")]
-    pub(crate) async fn subscribe_to_direct_methods(&mut self) {
+    async fn subscribe_to_direct_methods(&mut self) {
         self.d2c_sender
             .send(SendType::Subscribe(vec![(
                 TopicFilter::new(format!("{}#", DIRECT_METHOD_TOPIC_PREFIX)).unwrap(),

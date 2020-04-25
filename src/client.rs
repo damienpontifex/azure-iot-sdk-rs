@@ -1,5 +1,5 @@
 use crate::message::Message;
-use crate::mqtt_transport::{MessageHandler, MqttTransport};
+use crate::mqtt_transport::{MessageHandler, MqttTransport, Transport};
 
 use chrono::{Duration, Utc};
 
@@ -175,54 +175,16 @@ impl IoTHubClient {
         self.transport.send_message(message).await;
     }
 
-    /// Get the receiver channel where cloud to device messages will be sent to.
-    /// This can only be retrieved once as the receive side of the channel is a to
-    /// one operation. If the receiver has been retrieved already, `None` will be returned
-    ///
-    /// # Example
-    /// ```no_run
-    /// use azure_iot_sdk::client::IoTHubClient;
-    /// use azure_iot_sdk::message::MessageType;
-    ///
-    /// #[tokio::main]
-    /// async fn main() {
-    ///     let mut client = IoTHubClient::with_device_key(
-    ///         "iothubname.azure-devices.net".into(),
-    ///         "MyDeviceId".into(),
-    ///         "TheAccessKey".into()).await;
-    ///
-    ///     let mut rx = client.get_receiver().unwrap();
-    ///     while let Some(msg) = rx.recv().await {
-    ///         match msg {
-    ///             MessageType::C2DMessage(message) => println!("Received message {:?}", message),
-    ///             MessageType::DirectMethod(direct_method) => println!("Received direct method {:?}", direct_method),
-    ///             MessageType::DesiredPropertyUpdate(property_update) => println!("Received property update {:?}", property_update)
-    ///         }
-    ///     }
-    /// }
-    /// ```
-
-    // pub fn get_receiver(&mut self) -> Option<Receiver<MessageType>> {
-    //     if self.transport.c2d_receiver.is_some() {
-    //         Some(std::mem::replace(&mut self.transport.c2d_receiver, None).unwrap())
-    //     } else {
-    //         None
-    //     }
-    // }
-
     #[cfg(feature = "c2d-messages")]
     pub async fn on_message<T>(&mut self, handler: T)
     where
         T: Fn(Message) + Send + 'static,
     {
-        let message_handler = MessageHandler::MessageHandler(Box::new(handler));
-        if let Err(_) = self.transport.handler_tx.send(message_handler).await {
-            error!("Failed to set message handler for c2d messages");
-            return;
-        }
-
         self.transport
-            .subscribe_to_c2d_messages(&self.device_id)
+            .set_message_handler(
+                &self.device_id,
+                MessageHandler::MessageHandler(Box::new(handler)),
+            )
             .await;
     }
 
@@ -231,13 +193,12 @@ impl IoTHubClient {
     where
         T: Fn(String, Message) -> i32 + Send + 'static,
     {
-        let message_handler = MessageHandler::DirectMethodHandler(Box::new(handler));
-        if let Err(_) = self.transport.handler_tx.send(message_handler).await {
-            error!("Failed to set message handler for direct method invocation");
-            return;
-        }
-
-        self.transport.subscribe_to_direct_methods().await;
+        self.transport
+            .set_message_handler(
+                &self.device_id,
+                MessageHandler::DirectMethodHandler(Box::new(handler)),
+            )
+            .await;
     }
 
     #[cfg(feature = "twin-properties")]
@@ -245,13 +206,12 @@ impl IoTHubClient {
     where
         T: Fn(Message) + Send + 'static,
     {
-        let message_handler = MessageHandler::TwinUpdateHandler(Box::new(handler));
-        if let Err(_) = self.transport.handler_tx.send(message_handler).await {
-            error!("Failed to set message handler for twin property update");
-            return;
-        }
-
-        self.transport.subscribe_to_twin_updates().await;
+        self.transport
+            .set_message_handler(
+                &self.device_id,
+                MessageHandler::TwinUpdateHandler(Box::new(handler)),
+            )
+            .await;
     }
 }
 

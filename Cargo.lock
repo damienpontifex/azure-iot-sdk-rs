@@ -19,6 +19,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-trait"
+version = "0.1.30"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da71fef07bc806586090247e971229289f64c210a278ee5ae419314eb386b31d"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "atty"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -39,6 +50,7 @@ checksum = "f8aac770f1885fd7e387acedd76065302551364496e46b3dd00860b2f8359b9d"
 name = "azure_iot_sdk"
 version = "0.2.0"
 dependencies = [
+ "async-trait",
  "base64",
  "chrono",
  "config",
