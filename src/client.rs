@@ -176,6 +176,10 @@ impl IoTHubClient {
         self.transport.send_message(message).await;
     }
 
+    pub async fn send_property_update(&mut self, request_id: &str, body: &str) {
+        self.transport.send_property_update(request_id, body).await;
+    }
+
     /// Define the cloud to device message handler
     ///
     /// # Example
