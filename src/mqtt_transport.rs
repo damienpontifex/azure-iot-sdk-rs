@@ -1,17 +1,16 @@
-use crate::message::{DirectMethodResponse, Message, SendType};
-
-use async_trait::async_trait;
-
+use mqtt::{Encodable, QualityOfService};
+use mqtt::{TopicFilter, TopicName};
+use mqtt::control::variable_header::ConnectReturnCode;
+use mqtt::packet::*;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::time;
 use tokio_tls::{TlsConnector, TlsStream};
 
-use mqtt::control::variable_header::ConnectReturnCode;
-use mqtt::packet::*;
-use mqtt::{Encodable, QualityOfService};
-use mqtt::{TopicFilter, TopicName};
+use async_trait::async_trait;
+
+use crate::message::{DirectMethodResponse, Message, SendType};
 
 // Incoming topic names
 const METHOD_POST_TOPIC_FILTER: &str = "$iothub/methods/POST/#";
@@ -20,14 +19,21 @@ const TWIN_RESPONSE_TOPIC_FILTER: &str = "$iothub/twin/res/#";
 // const TWIN_RESPONSE_TOPIC_PREFIX: &str = "$iothub/twin/res/";
 const TWIN_PATCH_TOPIC_FILTER: &str = "$iothub/twin/PATCH/properties/desired/#";
 const TWIN_PATCH_TOPIC_PREFIX: &str = "$iothub/twin/PATCH/properties/desired/";
+const TWIN_PATCH_UPDATE_PREFIX: &str = "$iothub/twin/PATCH/properties/reported/";
 
 // Outgoing topic names
 fn method_response_topic(status: i32, request_id: &str) -> String {
     format!("$iothub/methods/res/{}/?$rid={}", status, request_id)
 }
+
 fn twin_get_topic(request_id: &str) -> String {
     format!("$iothub/twin/GET/?$rid={}", request_id)
 }
+
+fn twin_update_topic(request_id: &str) -> String {
+    format!("{}?$rid={}", TWIN_PATCH_UPDATE_PREFIX, request_id)
+}
+
 fn device_bound_messages_topic_filter(device_id: &str) -> String {
     format!("devices/{}/messages/devicebound/#", device_id)
 }
@@ -45,6 +51,7 @@ const REQUEST_ID_PARAM: &str = "?$rid=";
 pub(crate) trait Transport {
     async fn new(hub_name: String, device_id: String, sas: String) -> Self;
     async fn send_message(&mut self, message: Message);
+    async fn send_property_update(&mut self, request_id: &str, body: &str);
     async fn set_message_handler(&mut self, device_id: &str, handler: MessageHandler);
 }
 
@@ -148,6 +155,20 @@ where
                 let subscribe_packet = SubscribePacket::new(10, topic_filters);
                 let mut buf = Vec::new();
                 subscribe_packet.encode(&mut buf).unwrap();
+                write_socket.write_all(&buf[..]).await.unwrap();
+            }
+            SendType::PublishTwinProperties {request_id, body} => {
+                trace!(
+                    "Publishing twin properties with rid = {}",
+                    request_id
+                );
+                let packet = PublishPacket::new(
+                    TopicName::new(twin_update_topic(&request_id)).unwrap(),
+                    QoSWithPacketIdentifier::Level0,
+                    body.as_bytes(),
+                );
+                let mut buf = vec![];
+                packet.encode(&mut buf).unwrap();
                 write_socket.write_all(&buf[..]).await.unwrap();
             }
         }
@@ -348,6 +369,13 @@ impl Transport for MqttTransport {
     async fn send_message(&mut self, message: Message) {
         self.d2c_sender
             .send(SendType::Message(message))
+            .await
+            .unwrap();
+    }
+
+    async fn send_property_update(&mut self, request_id: &str, body: &str) {
+        self.d2c_sender
+            .send(SendType::PublishTwinProperties {request_id: request_id.to_string(), body: body.to_string()})
             .await
             .unwrap();
     }

@@ -1,10 +1,9 @@
-use crate::message::Message;
-use crate::mqtt_transport::{MessageHandler, MqttTransport, Transport};
-
 use chrono::{Duration, Utc};
-
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
+
+use crate::message::Message;
+use crate::mqtt_transport::{MessageHandler, MqttTransport, Transport};
 
 const DEVICEID_KEY: &str = "DeviceId";
 const HOSTNAME_KEY: &str = "HostName";
@@ -142,7 +141,7 @@ impl IoTHubClient {
 
     /// Send a device to cloud message for this device to the IoT Hub
     ///
-    /// #Example
+    /// # Example
     /// ```no_run
     /// use azure_iot_sdk::client::IoTHubClient;
     /// use azure_iot_sdk::message::Message;
@@ -174,6 +173,41 @@ impl IoTHubClient {
     /// ```
     pub async fn send_message(&mut self, message: Message) {
         self.transport.send_message(message).await;
+    }
+
+    /// Send a property update from the device to the cloud
+    ///
+    /// Property updates sent from the device are used to publish the
+    /// device's current values for "properties" in IoTCentral terminology
+    /// or Device Twin Attributes in IoTHub terminology.  The body of the
+    /// message should be JSON encoded with a map of names to values.  The
+    /// request ID should be a unique ID that will match the response sent
+    /// from the server via the property channel.
+    ///
+    /// # Example
+    ///
+    /// Suppose we have two properties `property_1` and `property_2` defined on our Device Twin
+    /// (or defined as properties in our IoTCentral device capability model).  For convenience
+    /// we define a struct so we can use `serde` to convert them to JSON.
+    ///
+    /// ```ignore
+    /// #[derive(Serialize)]
+    /// struct MyProperties {
+    ///    property_1: f64,
+    ///    property_2: f64,
+    /// }
+    /// ```
+    ///
+    /// Then to send the current value of the properties to the cloud, we would use something like
+    ///
+    /// ```ignore
+    ///    let my_struct = MyProperties {property_1 : 31.0, property_2: 42.0};
+    ///    let body = serde_json::to_string(&my_struct).unwrap();
+    ///    client.send_property_update(&format!("{}", update_counter), &body).await;
+    ///    update_counter += 1;
+    /// ```
+    pub async fn send_property_update(&mut self, request_id: &str, body: &str) {
+        self.transport.send_property_update(request_id, body).await;
     }
 
     /// Define the cloud to device message handler
