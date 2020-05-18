@@ -1,17 +1,16 @@
-use crate::message::{DirectMethodResponse, Message, SendType};
-
-use async_trait::async_trait;
-
+use mqtt::{Encodable, QualityOfService};
+use mqtt::{TopicFilter, TopicName};
+use mqtt::control::variable_header::ConnectReturnCode;
+use mqtt::packet::*;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::time;
 use tokio_tls::{TlsConnector, TlsStream};
 
-use mqtt::control::variable_header::ConnectReturnCode;
-use mqtt::packet::*;
-use mqtt::{Encodable, QualityOfService};
-use mqtt::{TopicFilter, TopicName};
+use async_trait::async_trait;
+
+use crate::message::{DirectMethodResponse, Message, SendType};
 
 // Incoming topic names
 const METHOD_POST_TOPIC_FILTER: &str = "$iothub/methods/POST/#";
@@ -26,10 +25,15 @@ const TWIN_PATCH_UPDATE_PREFIX: &str = "$iothub/twin/PATCH/properties/reported/"
 fn method_response_topic(status: i32, request_id: &str) -> String {
     format!("$iothub/methods/res/{}/?$rid={}", status, request_id)
 }
+
 fn twin_get_topic(request_id: &str) -> String {
     format!("$iothub/twin/GET/?$rid={}", request_id)
 }
-fn twin_update_topic(request_id: &str) -> String {format!("{}?$rid={}", TWIN_PATCH_UPDATE_PREFIX, request_id)}
+
+fn twin_update_topic(request_id: &str) -> String {
+    format!("{}?$rid={}", TWIN_PATCH_UPDATE_PREFIX, request_id)
+}
+
 fn device_bound_messages_topic_filter(device_id: &str) -> String {
     format!("devices/{}/messages/devicebound/#", device_id)
 }
