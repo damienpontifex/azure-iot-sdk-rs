@@ -190,7 +190,7 @@ impl IoTHubClient {
     /// (or defined as properties in our IoTCentral device capability model).  For convenience
     /// we define a struct so we can use `serde` to convert them to JSON.
     ///
-    /// ```no_run
+    /// ```ignore
     /// #[derive(Serialize)]
     /// struct MyProperties {
     ///    property_1: f64,
@@ -200,7 +200,7 @@ impl IoTHubClient {
     ///
     /// Then to send the current value of the properties to the cloud, we would use something like
     ///
-    /// ```no_run
+    /// ```ignore
     ///    let my_struct = MyProperties {property_1 : 31.0, property_2: 42.0};
     ///    let body = serde_json::to_string(&my_struct).unwrap();
     ///    client.send_property_update(&format!("{}", update_counter), &body).await;
