@@ -1,7 +1,7 @@
 use crate::message::Message;
 use crate::transport::{MessageHandler, Transport};
 use async_trait::async_trait;
-use hyper::{header, Body, Client, Method, Request};
+use hyper::{client::HttpConnector, header, Body, Client, Method, Request};
 use hyper_tls::HttpsConnector;
 
 #[derive(Debug, Clone)]
@@ -9,22 +9,23 @@ pub(crate) struct HttpTransport {
     hub_name: String,
     device_id: String,
     sas: String,
+    client: Client<HttpsConnector<HttpConnector>>,
 }
 
 #[async_trait]
 impl Transport for HttpTransport {
     async fn new(hub_name: String, device_id: String, sas: String) -> Self {
+        let https = HttpsConnector::new();
+        let client = Client::builder().build::<_, hyper::Body>(https);
         HttpTransport {
             hub_name,
             device_id,
             sas,
+            client,
         }
     }
 
     async fn send_message(&mut self, message: Message) {
-        let https = HttpsConnector::new();
-        let client = Client::builder().build::<_, hyper::Body>(https);
-
         let req = Request::builder()
             .method(Method::POST)
             .uri(format!(
@@ -36,16 +37,16 @@ impl Transport for HttpTransport {
             .body(Body::from(message.body))
             .unwrap();
 
-        let res = client.request(req).await.unwrap();
+        let res = self.client.request(req).await.unwrap();
 
         debug!("Response: {}", res.status());
     }
 
-    async fn send_property_update(&mut self, request_id: &str, body: &str) {
+    async fn send_property_update(&mut self, _request_id: &str, _body: &str) {
         unimplemented!()
     }
 
-    async fn set_message_handler(&mut self, device_id: &str, handler: MessageHandler) {
+    async fn set_message_handler(&mut self, _device_id: &str, _handler: MessageHandler) {
         unimplemented!()
     }
 }

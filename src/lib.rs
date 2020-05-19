@@ -66,4 +66,5 @@ pub(crate) mod http_transport;
 pub mod message;
 #[cfg(not(any(feature = "http-transport", feature = "amqp-transport")))]
 pub(crate) mod mqtt_transport;
+/// Transport types
 pub mod transport;
