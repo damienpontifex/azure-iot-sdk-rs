@@ -1,7 +1,7 @@
-use mqtt::{Encodable, QualityOfService};
-use mqtt::{TopicFilter, TopicName};
 use mqtt::control::variable_header::ConnectReturnCode;
 use mqtt::packet::*;
+use mqtt::{Encodable, QualityOfService};
+use mqtt::{TopicFilter, TopicName};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
@@ -11,6 +11,7 @@ use tokio_tls::{TlsConnector, TlsStream};
 use async_trait::async_trait;
 
 use crate::message::{DirectMethodResponse, Message, SendType};
+use crate::transport::{MessageHandler, Transport};
 
 // Incoming topic names
 const METHOD_POST_TOPIC_FILTER: &str = "$iothub/methods/POST/#";
@@ -46,14 +47,6 @@ fn cloud_bound_messages_topic(device_id: &str) -> String {
 
 const KEEP_ALIVE: u16 = 10;
 const REQUEST_ID_PARAM: &str = "?$rid=";
-
-#[async_trait]
-pub(crate) trait Transport {
-    async fn new(hub_name: String, device_id: String, sas: String) -> Self;
-    async fn send_message(&mut self, message: Message);
-    async fn send_property_update(&mut self, request_id: &str, body: &str);
-    async fn set_message_handler(&mut self, device_id: &str, handler: MessageHandler);
-}
 
 /// Connect to Azure IoT Hub
 ///
@@ -157,11 +150,8 @@ where
                 subscribe_packet.encode(&mut buf).unwrap();
                 write_socket.write_all(&buf[..]).await.unwrap();
             }
-            SendType::PublishTwinProperties {request_id, body} => {
-                trace!(
-                    "Publishing twin properties with rid = {}",
-                    request_id
-                );
+            SendType::PublishTwinProperties { request_id, body } => {
+                trace!("Publishing twin properties with rid = {}", request_id);
                 let packet = PublishPacket::new(
                     TopicName::new(twin_update_topic(&request_id)).unwrap(),
                     QoSWithPacketIdentifier::Level0,
@@ -173,12 +163,6 @@ where
             }
         }
     }
-}
-
-pub(crate) enum MessageHandler {
-    Message(Box<dyn Fn(Message) + Send>),
-    TwinUpdate(Box<dyn Fn(Message) + Send>),
-    DirectMethod(Box<dyn Fn(String, Message) -> i32 + Send>),
 }
 
 /// Start receive async loop as task that will send received messages from the cloud onto mpsc
@@ -375,7 +359,10 @@ impl Transport for MqttTransport {
 
     async fn send_property_update(&mut self, request_id: &str, body: &str) {
         self.d2c_sender
-            .send(SendType::PublishTwinProperties {request_id: request_id.to_string(), body: body.to_string()})
+            .send(SendType::PublishTwinProperties {
+                request_id: request_id.to_string(),
+                body: body.to_string(),
+            })
             .await
             .unwrap();
     }
