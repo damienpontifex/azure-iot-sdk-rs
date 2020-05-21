@@ -1,9 +1,12 @@
+#[cfg(feature = "http-transport")]
+use crate::http_transport::HttpTransport;
+use crate::message::Message;
+#[cfg(not(any(feature = "http-transport", feature = "amqp-transport")))]
+use crate::mqtt_transport::MqttTransport;
+use crate::transport::{MessageHandler, Transport};
 use chrono::{Duration, Utc};
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
-
-use crate::message::Message;
-use crate::mqtt_transport::{MessageHandler, MqttTransport, Transport};
 
 const DEVICEID_KEY: &str = "DeviceId";
 const HOSTNAME_KEY: &str = "HostName";
@@ -13,7 +16,10 @@ const SHAREDACCESSKEY_KEY: &str = "SharedAccessKey";
 #[derive(Debug, Clone)]
 pub struct IoTHubClient {
     device_id: String,
+    #[cfg(not(any(feature = "http-transport", feature = "amqp-transport")))]
     transport: MqttTransport,
+    #[cfg(feature = "http-transport")]
+    transport: HttpTransport,
 }
 
 fn generate_sas(hub: &str, device_id: &str, key: &str, expiry_timestamp: i64) -> String {
@@ -131,7 +137,11 @@ impl IoTHubClient {
     /// }
     /// ```
     pub async fn new(hub_name: String, device_id: String, sas: String) -> Self {
+        #[cfg(not(any(feature = "http-transport", feature = "amqp-transport")))]
         let transport = MqttTransport::new(hub_name, device_id.clone(), sas).await;
+
+        #[cfg(feature = "http-transport")]
+        let transport = HttpTransport::new(hub_name, device_id.clone(), sas).await;
 
         Self {
             device_id,
