@@ -68,3 +68,6 @@ pub mod message;
 pub(crate) mod mqtt_transport;
 /// Transport types
 pub mod transport;
+
+/// Errors
+pub mod errors;

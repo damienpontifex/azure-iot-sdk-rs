@@ -1,12 +1,20 @@
+use chrono::{Duration, Utc};
+use hmac::{Hmac, Mac};
+#[cfg(feature = "with-provision")]
+use hyper::{Body, Client, header, Method, Request};
+use hyper::header::AUTHORIZATION;
+use hyper::StatusCode;
+#[cfg(feature = "with-provision")]
+use hyper_tls::HttpsConnector;
+use sha2::Sha256;
+
+use crate::errors::ErrorKind;
 #[cfg(feature = "http-transport")]
 use crate::http_transport::HttpTransport;
 use crate::message::Message;
 #[cfg(not(any(feature = "http-transport", feature = "amqp-transport")))]
 use crate::mqtt_transport::MqttTransport;
 use crate::transport::{MessageHandler, Transport};
-use chrono::{Duration, Utc};
-use hmac::{Hmac, Mac};
-use sha2::Sha256;
 
 const DEVICEID_KEY: &str = "DeviceId";
 const HOSTNAME_KEY: &str = "HostName";
@@ -22,6 +30,17 @@ pub struct IoTHubClient {
     transport: HttpTransport,
 }
 
+fn generate_token(key: &str, message: &str) -> String {
+    let key = base64::decode(&key).unwrap();
+    let mut mac = Hmac::<Sha256>::new_varkey(&key).unwrap();
+    mac.input(message.as_bytes());
+    let mac_result = mac.result().code();
+    let signature = base64::encode(mac_result.as_ref());
+
+    let pairs = &vec![("sig", signature)];
+    serde_urlencoded::to_string(pairs).unwrap()
+}
+
 fn generate_sas(hub: &str, device_id: &str, key: &str, expiry_timestamp: i64) -> String {
     let resource_uri = format!("{}/devices/{}", hub, device_id);
 
@@ -30,19 +49,25 @@ fn generate_sas(hub: &str, device_id: &str, key: &str, expiry_timestamp: i64) ->
     let resource_uri = percent_encoding::utf8_percent_encode(&resource_uri, FRAGMENT);
     let to_sign = format!("{}\n{}", &resource_uri, expiry_timestamp);
 
-    let key = base64::decode(&key).unwrap();
-    let mut mac = Hmac::<Sha256>::new_varkey(&key).unwrap();
-    mac.input(to_sign.as_bytes());
-    let mac_result = mac.result().code();
-    let signature = base64::encode(mac_result.as_ref());
-
-    let pairs = &vec![("sig", signature)];
-    let token = serde_urlencoded::to_string(pairs).unwrap();
+    let token = generate_token(key, &to_sign);
 
     let sas = format!(
         "SharedAccessSignature sr={}&{}&se={}",
         resource_uri, token, expiry_timestamp
     );
+
+    sas
+}
+
+fn generate_registration_sas(scope: &str, device_id: &str, device_key: &str, expiry_timestamp: i64) -> String {
+    let to_sign = format!("{scope}%2fregistrations%2f{device_id}\n{expires}", scope = scope,
+                          device_id = device_id, expires = expiry_timestamp);
+
+    let token = generate_token(device_key, &to_sign);
+
+    let sas = format!("SharedAccessSignature sr={scope}%2fregistrations%2f{device_id}&{token}&se={expires}",
+                      scope = scope, device_id = device_id, token = token,
+                      expires = expiry_timestamp);
 
     sas
 }
@@ -141,12 +166,96 @@ impl IoTHubClient {
         let transport = MqttTransport::new(hub_name, device_id.clone(), sas).await;
 
         #[cfg(feature = "http-transport")]
-        let transport = HttpTransport::new(hub_name, device_id.clone(), sas).await;
+            let transport = HttpTransport::new(hub_name, device_id.clone(), sas).await;
 
         Self {
             device_id,
             transport,
         }
+    }
+
+    /// Create a new IoT Hub device client using the device provisioning service
+    ///
+    /// # Arguments
+    ///
+    /// * `scope` - The scope ID to use for the registration call
+    /// * `device_id` - The registered device to connect as
+    /// * `key` - The primary or secondary key for this device
+    /// * `max_retries` - The maximum number of retries at the provisioning service
+    ///
+    /// Note that this uses the default Azure device provisioning
+    /// service, which may be blocked in some countries.
+    ///
+    /// # Example
+    /// ```no_run
+    /// use azure_iot_sdk::client::IoTHubClient;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let mut client = IoTHubClient::from_provision_service(
+    ///           "ScopeID".into(),
+    ///           "DeviceID".into(),
+    ///           "DeviceKey".into(),
+    ///           4).await;
+    /// }
+    /// ```
+    #[cfg(feature = "with-provision")]
+    pub async fn from_provision_service(scope_id: &str, device_id: &str, device_key: &str, max_retries: i32) -> Result<IoTHubClient, Box<dyn std::error::Error>> {
+        let expiry = Utc::now() + Duration::days(1);
+        let expiry = expiry.timestamp();
+        let dps = "https://global.azure-devices-provisioning.net";
+        let api = "api-version=2018-11-01";
+        let sas = generate_registration_sas(scope_id, device_id, device_key, expiry);
+        let url = format!("{dps}/{scope_id}/registrations/{device_id}/register?{api}",
+                          dps = dps, scope_id = scope_id, device_id = device_id, api = api);
+        let mut map = serde_json::Map::new();
+        map.insert("registrationId".to_string(), serde_json::Value::String(device_id.to_string()));
+        let req = Request::builder()
+            .method(Method::PUT)
+            .uri(&url)
+            .header(header::CONTENT_TYPE, "application/json")
+            .header(header::AUTHORIZATION, sas.clone())
+            .body(Body::from(serde_json::to_string(&map).unwrap()))?;
+        let https = HttpsConnector::new();
+        let client = Client::builder().build::<_, hyper::Body>(https);
+        let res = client.request(req).await?;
+        if res.status() != StatusCode::ACCEPTED {
+            return Err(Box::new(ErrorKind::AzureProvisioningRejectedRequest))
+        }
+        let body = hyper::body::to_bytes(res).await.unwrap();
+        let reply: serde_json::Map<String, serde_json::Value> = serde_json::from_slice(&body).unwrap();
+        if !reply.contains_key("operationId") {
+            return Err(Box::new(ErrorKind::ProvisionRequestReplyMissingOperationId))
+        }
+        let operation = reply.get("operationId").unwrap().as_str().unwrap();
+        let url = format!("{dps}/{scope_id}/registrations/{device_id}/operations/{operation}?{api}",
+                          dps = dps, scope_id = scope_id, device_id = device_id,
+                          operation = operation, api = api);
+        let mut retries: i32 = 0;
+        let mut hubname = String::new();
+        while retries < max_retries {
+            tokio::time::delay_for(std::time::Duration::from_secs(3)).await;
+            let req = Request::builder()
+                .method(Method::GET)
+                .uri(&url)
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, sas.clone())
+                .body(Body::empty())?;
+            let res = client.request(req).await?;
+            if res.status() == StatusCode::OK {
+                let body = hyper::body::to_bytes(res).await.unwrap();
+                let reply: serde_json::Map<String, serde_json::Value> = serde_json::from_slice(&body).unwrap();
+                let registration_state = reply["registrationState"].as_object().unwrap();
+                let hub = registration_state["assignedHub"].as_str().unwrap();
+                hubname = hub.to_string();
+                break;
+            }
+            retries += 1;
+        }
+        if hubname.is_empty() {
+            return Err(Box::new(ErrorKind::FailedToGetIotHub));
+        }
+        Ok(IoTHubClient::with_device_key(hubname, device_id.to_string(), device_key.to_string()).await)
     }
 
     /// Send a device to cloud message for this device to the IoT Hub
@@ -326,6 +435,11 @@ mod tests {
     #[test]
     fn test_add() {
         assert_eq!(generate_sas("myiothub.azure-devices.net", "FirstDevice", "O+H9VTcdJP0Tqkl7bh4nVG0OJNrAataMpuWB54D0VEc=", 1_587_123_309), "SharedAccessSignature sr=myiothub.azure-devices.net%2Fdevices%2FFirstDevice&sig=vn0%2BgyIUKgaBhEU0ypyOhJ0gPK5fSY1TKdvcJ1HxhnQ%3D&se=1587123309".to_string());
+    }
+
+    #[test]
+    fn test_provision_sas() {
+        assert_eq!(generate_registration_sas("0ne000EEBBD", "FirstDevice", "O+H9VTcdJP0Tqkl7bh4nVG0OJNrAataMpuWB54D0VEc=", 1_591_921_306), "SharedAccessSignature sr=0ne000EEBBD%2fregistrations%2fFirstDevice&sig=hwgBlMB6G2Zg5ZcYtwmtLVKRbifiSCPfUMyscbVWa8o%3D&se=1591921306".to_string());
     }
 
     #[test]
