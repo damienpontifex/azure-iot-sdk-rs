@@ -12,18 +12,43 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
-      name: Checkout
+    - name: Checkout
+      uses: actions/checkout@v2
 
-    - uses: actions-rs/cargo@v1
-      name: Build
+    - name: Stable with rustfmt and clippy
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: stable
+        components: rustfmt, clippy
+
+    - name: Release build
+      uses: actions-rs/cargo@v1
       with:
         command: build
         args: --release --all-features
 
-    - uses: actions-rs/cargo@v1
-      name: Test
+    - name: Test
+      uses: actions-rs/cargo@v1
       with:
         command: test
         args: --release --all-features
+
+    - name: Annotate commit with clippy warnings
+      uses: actions-rs/clippy-check@v1
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        args: --all-features
+
+    - name: Install cargo-audit binary
+      uses: actions-rs/install@v0.1
+      with:
+        crate: cargo-audit
+        version: latest
+        use-tool-cache: true
+
+    - name: Security audit
+      uses: actions-rs/audit-check@v1
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
 
