@@ -69,5 +69,6 @@ pub(crate) mod mqtt_transport;
 /// Transport types
 pub mod transport;
 
-/// Errors
-pub mod errors;
+#[cfg(feature = "with-provision")]
+/// Provision support using Azure device provisioning service
+pub mod provision;
