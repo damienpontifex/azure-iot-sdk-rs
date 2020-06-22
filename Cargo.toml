@@ -16,12 +16,14 @@ direct-methods = []
 twin-properties = []
 c2d-messages = []
 http-transport = ["hyper", "hyper-tls"]
+with-provision = ["hyper", "hyper-tls"]
 
 [dependencies]
 native-tls = "0.2.4"
 mqtt-protocol = { version = "0.8.1", features = ["async"] }
 log = "0.4.0"
 serde_urlencoded = "0.6.1"
+serde_json = "1.0.55"
 serde = { version = "1.0", features = ["derive"] }
 tokio = { version = "0.2", features = ["rt-threaded", "macros", "tcp", "dns", "io-util", "time", "sync"] }
 tokio-tls = "0.3"

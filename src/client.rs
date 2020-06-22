@@ -1,12 +1,13 @@
+use chrono::{Duration, Utc};
+use hmac::{Hmac, Mac};
+use sha2::Sha256;
+
 #[cfg(feature = "http-transport")]
 use crate::http_transport::HttpTransport;
 use crate::message::Message;
 #[cfg(not(any(feature = "http-transport", feature = "amqp-transport")))]
 use crate::mqtt_transport::MqttTransport;
 use crate::transport::{MessageHandler, Transport};
-use chrono::{Duration, Utc};
-use hmac::{Hmac, Mac};
-use sha2::Sha256;
 
 const DEVICEID_KEY: &str = "DeviceId";
 const HOSTNAME_KEY: &str = "HostName";
@@ -22,6 +23,17 @@ pub struct IoTHubClient {
     transport: HttpTransport,
 }
 
+pub(crate) fn generate_token(key: &str, message: &str) -> String {
+    let key = base64::decode(&key).unwrap();
+    let mut mac = Hmac::<Sha256>::new_varkey(&key).unwrap();
+    mac.input(message.as_bytes());
+    let mac_result = mac.result().code();
+    let signature = base64::encode(mac_result.as_ref());
+
+    let pairs = &vec![("sig", signature)];
+    serde_urlencoded::to_string(pairs).unwrap()
+}
+
 fn generate_sas(hub: &str, device_id: &str, key: &str, expiry_timestamp: i64) -> String {
     let resource_uri = format!("{}/devices/{}", hub, device_id);
 
@@ -30,14 +42,7 @@ fn generate_sas(hub: &str, device_id: &str, key: &str, expiry_timestamp: i64) ->
     let resource_uri = percent_encoding::utf8_percent_encode(&resource_uri, FRAGMENT);
     let to_sign = format!("{}\n{}", &resource_uri, expiry_timestamp);
 
-    let key = base64::decode(&key).unwrap();
-    let mut mac = Hmac::<Sha256>::new_varkey(&key).unwrap();
-    mac.input(to_sign.as_bytes());
-    let mac_result = mac.result().code();
-    let signature = base64::encode(mac_result.as_ref());
-
-    let pairs = &vec![("sig", signature)];
-    let token = serde_urlencoded::to_string(pairs).unwrap();
+    let token = generate_token(key, &to_sign);
 
     let sas = format!(
         "SharedAccessSignature sr={}&{}&se={}",
@@ -141,7 +146,7 @@ impl IoTHubClient {
         let transport = MqttTransport::new(hub_name, device_id.clone(), sas).await;
 
         #[cfg(feature = "http-transport")]
-        let transport = HttpTransport::new(hub_name, device_id.clone(), sas).await;
+            let transport = HttpTransport::new(hub_name, device_id.clone(), sas).await;
 
         Self {
             device_id,
