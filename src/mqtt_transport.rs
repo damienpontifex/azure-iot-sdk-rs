@@ -2,11 +2,14 @@ use mqtt::control::variable_header::ConnectReturnCode;
 use mqtt::packet::*;
 use mqtt::{Encodable, QualityOfService};
 use mqtt::{TopicFilter, TopicName};
+use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::time;
-use tokio_tls::{TlsConnector, TlsStream};
+use tokio_rustls::{client::TlsStream, rustls::ClientConfig, webpki::DNSNameRef, TlsConnector};
+use webpki_roots;
+// use tokio_native_tls::{TlsConnector, TlsStream};
 
 use async_trait::async_trait;
 
@@ -61,20 +64,31 @@ const REQUEST_ID_PARAM: &str = "?$rid=";
 /// // let (read_socket, write_socket) = client::connect("myiothub".to_string(), "myfirstdevice".to_string(), "SharedAccessSignature sr=myiothub.azure-devices.net%2Fdevices%2Fmyfirstdevice&sig=blahblah&se=1586909077".to_string()).await;
 /// ```
 async fn tcp_connect(iot_hub: &str) -> TlsStream<TcpStream> {
-    let socket = TcpStream::connect((iot_hub, 8883)).await.unwrap();
+    let mut config = ClientConfig::new();
+    let mut cert: &[u8] = std::include_bytes!("BaltimoreCyberTrustRoot.crt.pem");
+    config.root_store.add_pem_file(&mut cert).unwrap();
+    config
+        .root_store
+        .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+    let config = TlsConnector::from(Arc::new(config));
+    let dnsname = DNSNameRef::try_from_ascii_str("test.mosquitto.org").unwrap();
 
-    trace!("Connected to tcp socket {:?}", socket);
+    let stream = TcpStream::connect(("test.mosquitto.org", 8883))
+        .await
+        .unwrap();
+    trace!("Connected to tcp socket {:?}", stream);
+    let socket = config.connect(dnsname, stream).await.unwrap();
 
-    let cx = TlsConnector::from(
-        native_tls::TlsConnector::builder()
-            .min_protocol_version(Some(native_tls::Protocol::Tlsv12))
-            .build()
-            .unwrap(),
-    );
+    // let cx = TlsConnector::from(
+    //     native_tls::TlsConnector::builder()
+    //         .min_protocol_version(Some(native_tls::Protocol::Tlsv12))
+    //         .build()
+    //         .unwrap(),
+    // );
 
-    let socket = cx.connect(&iot_hub, socket).await.unwrap();
+    // let socket = cx.connect(&iot_hub, socket).await.unwrap();
 
-    trace!("Connected tls context {:?}", cx);
+    trace!("Connected tls context {:?}", socket);
 
     socket
 }
