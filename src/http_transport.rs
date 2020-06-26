@@ -1,3 +1,4 @@
+use crate::client::TokenSource;
 use crate::message::Message;
 use crate::transport::{MessageHandler, Transport};
 use async_trait::async_trait;
@@ -14,7 +15,10 @@ pub(crate) struct HttpTransport {
 
 #[async_trait]
 impl Transport for HttpTransport {
-    async fn new(hub_name: &str, device_id: &str, sas: String) -> Self {
+    async fn new<TS>(hub_name: &str, device_id: &str, token_source: &TS) -> Self
+    where
+        TS: TokenSource + Sync + Send,
+    {
         let https = HttpsConnector::new();
         let client = Client::builder().build::<_, hyper::Body>(https);
         HttpTransport {

@@ -3,7 +3,7 @@ use hyper::{header, Body, Client, Method, Request, StatusCode};
 use hyper_tls::HttpsConnector;
 use serde::export::Formatter;
 
-use crate::client::{generate_token, DeviceKeyTokenSource, IoTHubClient};
+use crate::client::{generate_token, DeviceKeyTokenSource, IoTHubClient, TokenSource};
 
 const DPS_HOST: &str = "https://global.azure-devices-provisioning.net";
 const DPS_API_VERSION: &str = "api-version=2018-11-01";
@@ -53,7 +53,10 @@ impl std::fmt::Display for ErrorKind {
 
 impl std::error::Error for ErrorKind {}
 
-impl IoTHubClient<'_, TS> {
+impl IoTHubClient<'_, TS>
+where
+    TS: TokenSource + Sync + Send,
+{
     /// Create a new IoT Hub device client using the device provisioning service
     ///
     /// # Arguments
@@ -85,7 +88,7 @@ impl IoTHubClient<'_, TS> {
         device_id: &'a str,
         device_key: &str,
         max_retries: i32,
-    ) -> Result<IoTHubClient<'a>, Box<dyn std::error::Error>> {
+    ) -> Result<IoTHubClient<'a, TS>, Box<dyn std::error::Error>> {
         let expiry = Utc::now() + Duration::days(1);
         let expiry = expiry.timestamp();
         let sas = generate_registration_sas(scope_id, device_id, device_key, expiry);

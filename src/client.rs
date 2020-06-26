@@ -1,62 +1,68 @@
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Utc};
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 
 #[cfg(feature = "http-transport")]
 use crate::http_transport::HttpTransport;
-use crate::message::{Message, MessageType};
+use crate::message::Message;
 #[cfg(not(any(feature = "http-transport", feature = "amqp-transport")))]
-use crate::mqtt_transport::{receive, MqttTransport};
+use crate::mqtt_transport::MqttTransport;
 use crate::transport::{MessageHandler, Transport};
-use tokio::sync::mpsc;
 
 const DEVICEID_KEY: &str = "DeviceId";
 const HOSTNAME_KEY: &str = "HostName";
 const SHAREDACCESSKEY_KEY: &str = "SharedAccessKey";
 
+///
 pub trait TokenSource {
+    ///
     fn get(&self, expiry: &DateTime<Utc>) -> String;
 }
 
 impl std::fmt::Debug for dyn TokenSource {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, _: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         unimplemented!("Only implemented by implementations of TokenSource")
     }
 }
 
+///
 #[derive(Debug, Clone)]
 pub struct SasTokenSource<'a> {
     sas: &'a str,
 }
 
 impl<'a> SasTokenSource<'_> {
-    fn new(sas: &'a str) -> SasTokenSource<'_> {
+    ///
+    pub fn new(sas: &'a str) -> SasTokenSource<'_> {
         SasTokenSource { sas }
     }
 }
 
 impl<'a> TokenSource for SasTokenSource<'_> {
-    fn get(&self, expiry: &DateTime<Utc>) -> String {
+    fn get(&self, _: &DateTime<Utc>) -> String {
         self.sas.to_string()
     }
 }
 
+///
 #[derive(Debug, Clone)]
 pub struct DeviceKeyTokenSource<'a> {
-    hub: &'a str,
+    resource_uri: String,
     device_id: &'a str,
     key: &'a str,
 }
 
 impl<'a> DeviceKeyTokenSource<'_> {
-    pub fn new(hub: &'a str, device_id: &'a str, key: &'a str) -> DeviceKeyTokenSource<'a> {
+    ///
+    pub fn new(hub: &str, device_id: &'a str, key: &'a str) -> DeviceKeyTokenSource<'a> {
         DeviceKeyTokenSource {
-            hub,
+            resource_uri: format!("{}/devices/{}", hub, device_id),
             device_id,
             key,
         }
     }
 
+    ///
     pub fn new_from_connection_string(connection_string: &'a str) -> DeviceKeyTokenSource<'a> {
         let mut key = None;
         let mut device_id = None;
@@ -82,7 +88,21 @@ impl<'a> DeviceKeyTokenSource<'_> {
 
 impl<'a> TokenSource for DeviceKeyTokenSource<'_> {
     fn get(&self, expiry: &DateTime<Utc>) -> String {
-        generate_sas(self.hub, self.device_id, self.key, expiry.timestamp())
+        let expiry_timestamp = expiry.timestamp();
+
+        const FRAGMENT: &percent_encoding::AsciiSet = &percent_encoding::CONTROLS.add(b'/');
+
+        let resource_uri = percent_encoding::utf8_percent_encode(&self.resource_uri, FRAGMENT);
+        let to_sign = format!("{}\n{}", &self.resource_uri, expiry_timestamp);
+
+        let token = generate_token(self.key, &to_sign);
+
+        let sas = format!(
+            "SharedAccessSignature sr={}&{}&se={}",
+            resource_uri, token, expiry_timestamp
+        );
+
+        sas
     }
 }
 
@@ -106,24 +126,6 @@ pub(crate) fn generate_token(key: &str, message: &str) -> String {
 
     let pairs = &vec![("sig", signature)];
     serde_urlencoded::to_string(pairs).unwrap()
-}
-
-fn generate_sas(hub: &str, device_id: &str, key: &str, expiry_timestamp: i64) -> String {
-    let resource_uri = format!("{}/devices/{}", hub, device_id);
-
-    const FRAGMENT: &percent_encoding::AsciiSet = &percent_encoding::CONTROLS.add(b'/');
-
-    let resource_uri = percent_encoding::utf8_percent_encode(&resource_uri, FRAGMENT);
-    let to_sign = format!("{}\n{}", &resource_uri, expiry_timestamp);
-
-    let token = generate_token(key, &to_sign);
-
-    let sas = format!(
-        "SharedAccessSignature sr={}&{}&se={}",
-        resource_uri, token, expiry_timestamp
-    );
-
-    sas
 }
 
 impl<'a, TS> IoTHubClient<'a, TS>
@@ -199,13 +201,6 @@ where
     pub async fn send_message(&mut self, message: Message) {
         self.transport.send_message(message).await;
     }
-
-    // pub async fn get_receiver(&mut self) -> mpsc::Receiver<MessageType> {
-    //     // create mpsc sender/receiver
-    //     // create receive loop
-    //     // return receiver for client to get messages on
-    //     tokio::spawn(receive(, device_id, sender, receiver))
-    // }
 
     /// Send a property update from the device to the cloud
     ///
