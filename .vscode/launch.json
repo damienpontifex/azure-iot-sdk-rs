@@ -1,0 +1,175 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in library 'azure_iot_sdk'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--lib",
+          "--package=azure_iot_sdk"
+        ],
+        "filter": {
+          "name": "azure_iot_sdk",
+          "kind": "lib"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug example 'send-message'",
+      "cargo": {
+        "args": [
+          "build",
+          "--example=send-message",
+          "--package=azure_iot_sdk"
+        ],
+        "filter": {
+          "name": "send-message",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in example 'send-message'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--example=send-message",
+          "--package=azure_iot_sdk"
+        ],
+        "filter": {
+          "name": "send-message",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug example 'rpizero_dht22'",
+      "cargo": {
+        "args": [
+          "build",
+          "--example=rpizero_dht22",
+          "--package=azure_iot_sdk"
+        ],
+        "filter": {
+          "name": "rpizero_dht22",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in example 'rpizero_dht22'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--example=rpizero_dht22",
+          "--package=azure_iot_sdk"
+        ],
+        "filter": {
+          "name": "rpizero_dht22",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug example 'temperature-client'",
+      "cargo": {
+        "args": [
+          "build",
+          "--example=temperature-client",
+          "--package=azure_iot_sdk"
+        ],
+        "filter": {
+          "name": "temperature-client",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in example 'temperature-client'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--example=temperature-client",
+          "--package=azure_iot_sdk"
+        ],
+        "filter": {
+          "name": "temperature-client",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug example 'receive-c2d-messages'",
+      "cargo": {
+        "args": [
+          "build",
+          "--example=receive-c2d-messages",
+          "--package=azure_iot_sdk"
+        ],
+        "filter": {
+          "name": "receive-c2d-messages",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in example 'receive-c2d-messages'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--example=receive-c2d-messages",
+          "--package=azure_iot_sdk"
+        ],
+        "filter": {
+          "name": "receive-c2d-messages",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}

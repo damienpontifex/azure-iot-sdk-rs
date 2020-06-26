@@ -47,7 +47,12 @@ pub enum SendType {
     /// Subscribe to a particular topic
     Subscribe(Vec<(TopicFilter, QualityOfService)>),
     /// Update the current properties to the hub
-    PublishTwinProperties { request_id: String, body: String },
+    PublishTwinProperties {
+        ///
+        request_id: String,
+        ///
+        body: String,
+    },
 }
 
 // System properties that are user settable

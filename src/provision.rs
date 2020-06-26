@@ -1,9 +1,13 @@
 use chrono::{Duration, Utc};
-use hyper::{Body, Client, header, Method, Request, StatusCode};
+use hyper::{header, Body, Client, Method, Request, StatusCode};
 use hyper_tls::HttpsConnector;
 use serde::export::Formatter;
 
-use crate::client::{generate_token, IoTHubClient};
+use crate::{
+    client::IoTHubClient,
+    token::{generate_token, DeviceKeyTokenSource},
+    transport::Transport,
+};
 
 const DPS_HOST: &str = "https://global.azure-devices-provisioning.net";
 const DPS_API_VERSION: &str = "api-version=2018-11-01";
@@ -53,7 +57,10 @@ impl std::fmt::Display for ErrorKind {
 
 impl std::error::Error for ErrorKind {}
 
-impl IoTHubClient<'_> {
+impl<'a, TR> IoTHubClient<'a, TR>
+where
+    TR: Transport,
+{
     /// Create a new IoT Hub device client using the device provisioning service
     ///
     /// # Arguments
@@ -68,11 +75,11 @@ impl IoTHubClient<'_> {
     ///
     /// # Example
     /// ```no_run
-    /// use azure_iot_sdk::client::IoTHubClient;
+    /// use azure_iot_sdk::{IoTHubClient, MqttTransport};
     ///
     /// #[tokio::main]
     /// async fn main() {
-    ///     let mut client = IoTHubClient::from_provision_service(
+    ///     let mut client = IoTHubClient::<MqttTransport>::from_provision_service(
     ///           "ScopeID",
     ///           "DeviceID",
     ///           "DeviceKey",
@@ -80,12 +87,12 @@ impl IoTHubClient<'_> {
     /// }
     /// ```
     #[cfg(feature = "with-provision")]
-    pub async fn from_provision_service<'a>(
+    pub async fn from_provision_service(
         scope_id: &str,
         device_id: &'a str,
-        device_key: &str,
+        device_key: &'a str,
         max_retries: i32,
-    ) -> Result<IoTHubClient<'a>, Box<dyn std::error::Error>> {
+    ) -> Result<IoTHubClient<'a, TR>, Box<dyn std::error::Error>> {
         let expiry = Utc::now() + Duration::days(1);
         let expiry = expiry.timestamp();
         let sas = generate_registration_sas(scope_id, device_id, device_key, expiry);
@@ -153,7 +160,9 @@ impl IoTHubClient<'_> {
         if hubname.is_empty() {
             return Err(Box::new(ErrorKind::FailedToGetIotHub));
         }
-        Ok(IoTHubClient::with_device_key(&hubname, device_id, device_key.to_string()).await)
+
+        let token_source = DeviceKeyTokenSource::new(&hubname, device_id, device_key);
+        Ok(IoTHubClient::new(&hubname, device_id, token_source).await)
     }
 }
 

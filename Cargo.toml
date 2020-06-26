@@ -11,7 +11,7 @@ license = "MIT"
 readme = "README.md"
 
 [features]
-default = ["c2d-messages", "direct-methods", "twin-properties"]
+default = ["c2d-messages", "direct-methods", "twin-properties", "with-provision"]
 direct-methods = []
 twin-properties = []
 c2d-messages = []
@@ -32,7 +32,6 @@ chrono = "0.4.11"
 hmac = "0.7.1"
 sha2 = "0.8.1"
 base64 = "0.12.0"
-percent-encoding = "2.1.0"
 async-trait = "0.1.30"
 hyper = { version = "0.13", optional = true }
 hyper-tls = { version = "0.4.1", optional = true }
