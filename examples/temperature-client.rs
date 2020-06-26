@@ -4,6 +4,7 @@ extern crate log;
 use azure_iot_sdk::{
     client::{DeviceKeyTokenSource, IoTHubClient},
     message::Message,
+    mqtt_transport::MqttTransport,
 };
 
 use chrono::{DateTime, Utc};
@@ -90,7 +91,8 @@ async fn main() {
         &config.shared_access_key,
     );
 
-    let mut client = IoTHubClient::new(&config.hostname, &config.device_id, token_source).await;
+    let mut client =
+        IoTHubClient::<MqttTransport>::new(&config.hostname, &config.device_id, token_source).await;
 
     info!("Initialized client");
 

@@ -2,12 +2,13 @@ use chrono::{DateTime, Utc};
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 
-#[cfg(feature = "http-transport")]
-use crate::http_transport::HttpTransport;
+// #[cfg(feature = "http-transport")]
+// use crate::http_transport::HttpTransport;
 use crate::message::Message;
 #[cfg(not(any(feature = "http-transport", feature = "amqp-transport")))]
 use crate::mqtt_transport::MqttTransport;
 use crate::transport::{MessageHandler, Transport};
+use std::marker::PhantomData;
 
 const DEVICEID_KEY: &str = "DeviceId";
 const HOSTNAME_KEY: &str = "HostName";
@@ -108,12 +109,12 @@ impl<'a> TokenSource for DeviceKeyTokenSource<'_> {
 
 /// Client for communicating with IoT hub
 #[derive(Debug, Clone)]
-pub struct IoTHubClient<'a, TS> {
+pub struct IoTHubClient<'a, TR>
+where
+    TR: Transport,
+{
     device_id: &'a str,
-    #[cfg(not(any(feature = "http-transport", feature = "amqp-transport")))]
-    transport: MqttTransport,
-    #[cfg(feature = "http-transport")]
-    transport: HttpTransport<TS>,
+    transport: TR,
 }
 
 pub(crate) fn generate_token(key: &str, message: &str) -> String {
@@ -127,9 +128,9 @@ pub(crate) fn generate_token(key: &str, message: &str) -> String {
     serde_urlencoded::to_string(pairs).unwrap()
 }
 
-impl<'a, TS> IoTHubClient<'a, TS>
+impl<'a, TR> IoTHubClient<'a, TR>
 where
-    TS: TokenSource + Sync + Send,
+    TR: Transport,
 {
     /// Create a new IoT Hub device client using a shared access signature
     ///
@@ -151,12 +152,20 @@ where
     ///         "SharedAccessSignature sr=iothubname.azure-devices.net%2Fdevices%2MyDeviceId&sig=vn0%2BgyIUKgaBhEU0ypyOhJ0gPK5fSY1TKdvcJ1HxhnQ%3D&se=1587123309").await;
     /// }
     /// ```
-    pub async fn new(hub_name: &str, device_id: &'a str, token_source: TS) -> IoTHubClient<'a, TS> {
-        #[cfg(not(any(feature = "http-transport", feature = "amqp-transport")))]
-        let transport = MqttTransport::new(hub_name, device_id, token_source).await;
-
-        #[cfg(feature = "http-transport")]
-        let transport = HttpTransport::new(hub_name, device_id, token_source).await;
+    pub async fn new<TS>(
+        hub_name: &str,
+        device_id: &'a str,
+        token_source: TS,
+    ) -> IoTHubClient<'a, TR>
+    where
+        TS: TokenSource + Sync + Send,
+    {
+        let transport = TR::new(hub_name, device_id, token_source).await;
+        //         #[cfg(not(any(feature = "http-transport", feature = "amqp-transport")))]
+        //         let transport = MqttTransport::new(hub_name, device_id, token_source).await;
+        //
+        //         #[cfg(feature = "http-transport")]
+        //         let transport = HttpTransport::new(hub_name, device_id, token_source).await;
 
         Self {
             device_id,

@@ -64,8 +64,9 @@ pub mod client;
 pub(crate) mod http_transport;
 /// Message types for communicating with the IoT Hub
 pub mod message;
+///
 #[cfg(not(any(feature = "http-transport", feature = "amqp-transport")))]
-pub(crate) mod mqtt_transport;
+pub mod mqtt_transport;
 /// Transport types
 pub mod transport;
 

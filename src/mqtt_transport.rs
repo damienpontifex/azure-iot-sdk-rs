@@ -274,14 +274,14 @@ async fn ping(interval: u16, mut sender: Sender<SendType>) {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct MqttTransport {
+pub struct MqttTransport {
     pub(crate) handler_tx: Sender<MessageHandler>,
     pub(crate) d2c_sender: Sender<SendType>,
 }
 
 #[async_trait]
-impl<TS> Transport<TS> for MqttTransport {
-    async fn new(hub_name: &str, device_id: &str, token_source: TS) -> Self
+impl Transport for MqttTransport {
+    async fn new<TS>(hub_name: &str, device_id: &str, token_source: TS) -> Self
     where
         TS: TokenSource + Sync + Send,
     {
