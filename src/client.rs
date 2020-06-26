@@ -70,7 +70,7 @@ where
     /// # Example
     /// ```no_run
     /// use tokio::time;
-    /// use azure_iot_sdk::{IoTHubClient, DeviceKeyTokenSource, MqttTransport};
+    /// use azure_iot_sdk::{IoTHubClient, DeviceKeyTokenSource, MqttTransport, Message};
     ///
     /// #[tokio::main]
     /// async fn main() {

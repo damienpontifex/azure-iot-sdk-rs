@@ -75,11 +75,11 @@ where
     ///
     /// # Example
     /// ```no_run
-    /// use azure_iot_sdk::client::IoTHubClient;
+    /// use azure_iot_sdk::{IoTHubClient, MqttTransport};
     ///
     /// #[tokio::main]
     /// async fn main() {
-    ///     let mut client = IoTHubClient::from_provision_service(
+    ///     let mut client = IoTHubClient::<MqttTransport>::from_provision_service(
     ///           "ScopeID",
     ///           "DeviceID",
     ///           "DeviceKey",

@@ -41,16 +41,14 @@ impl<'a> TokenSource for SasTokenSource<'_> {
 #[derive(Debug, Clone)]
 pub struct DeviceKeyTokenSource<'a> {
     resource_uri: String,
-    device_id: &'a str,
     key: &'a str,
 }
 
 impl<'a> DeviceKeyTokenSource<'_> {
     ///
-    pub fn new(hub: &str, device_id: &'a str, key: &'a str) -> DeviceKeyTokenSource<'a> {
+    pub fn new(hub: &str, device_id: &str, key: &'a str) -> DeviceKeyTokenSource<'a> {
         DeviceKeyTokenSource {
             resource_uri: format!("{}%2Fdevices%2F{}", hub, device_id),
-            device_id,
             key,
         }
     }

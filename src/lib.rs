@@ -24,7 +24,7 @@
 //! A simple client
 //! ```no_run
 //! use tokio::time;
-//! use azure_iot_sdk::{IoTHubClient, DeviceKeyTokenSource, MqttTransport};
+//! use azure_iot_sdk::{IoTHubClient, DeviceKeyTokenSource, MqttTransport, Message};
 //!
 //! #[tokio::main]
 //! async fn main() {
@@ -75,9 +75,9 @@ pub(crate) mod http_transport;
 pub mod message;
 pub use message::*;
 ///
-#[cfg(not(any(feature = "http-transport", feature = "amqp-transport")))]
+// #[cfg(not(any(feature = "http-transport", feature = "amqp-transport")))]
 pub mod mqtt_transport;
-#[cfg(not(any(feature = "http-transport", feature = "amqp-transport")))]
+// #[cfg(not(any(feature = "http-transport", feature = "amqp-transport")))]
 pub use mqtt_transport::*;
 ///
 pub mod token;
