@@ -1,21 +1,95 @@
-use chrono::{Duration, Utc};
+use chrono::{DateTime, Duration, Utc};
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 
 #[cfg(feature = "http-transport")]
 use crate::http_transport::HttpTransport;
-use crate::message::Message;
+use crate::message::{Message, MessageType};
 #[cfg(not(any(feature = "http-transport", feature = "amqp-transport")))]
-use crate::mqtt_transport::MqttTransport;
+use crate::mqtt_transport::{receive, MqttTransport};
 use crate::transport::{MessageHandler, Transport};
+use tokio::sync::mpsc;
 
 const DEVICEID_KEY: &str = "DeviceId";
 const HOSTNAME_KEY: &str = "HostName";
 const SHAREDACCESSKEY_KEY: &str = "SharedAccessKey";
 
+pub trait TokenSource {
+    fn get(&self, expiry: &DateTime<Utc>) -> String;
+}
+
+impl std::fmt::Debug for dyn TokenSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        unimplemented!("Only implemented by implementations of TokenSource")
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SasTokenSource<'a> {
+    sas: &'a str,
+}
+
+impl<'a> SasTokenSource<'_> {
+    fn new(sas: &'a str) -> SasTokenSource<'_> {
+        SasTokenSource { sas }
+    }
+}
+
+impl<'a> TokenSource for SasTokenSource<'_> {
+    fn get(&self, expiry: &DateTime<Utc>) -> String {
+        self.sas.to_string()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DeviceKeyTokenSource<'a> {
+    hub: &'a str,
+    device_id: &'a str,
+    key: &'a str,
+}
+
+impl<'a> DeviceKeyTokenSource<'_> {
+    pub fn new(hub: &'a str, device_id: &'a str, key: &'a str) -> DeviceKeyTokenSource<'a> {
+        DeviceKeyTokenSource {
+            hub,
+            device_id,
+            key,
+        }
+    }
+
+    pub fn new_from_connection_string(connection_string: &'a str) -> DeviceKeyTokenSource<'a> {
+        let mut key = None;
+        let mut device_id = None;
+        let mut hub = None;
+
+        let parts: Vec<&str> = connection_string.split(';').collect();
+        for p in parts {
+            let s: Vec<&str> = p.split('=').collect();
+            match s[0] {
+                SHAREDACCESSKEY_KEY => key = Some(s[1]),
+                DEVICEID_KEY => device_id = Some(s[1]),
+                HOSTNAME_KEY => hub = Some(s[1]),
+                _ => (), // Ignore extraneous component in the connection string
+            }
+        }
+
+        // let key = key.ok_or(ErrorKind::ConnectionStringMissingRequiredParameter(
+        //     SHAREDACCESSKEY_KEY,
+        // ))?;
+        Self::new(hub.unwrap(), device_id.unwrap(), key.unwrap())
+    }
+}
+
+impl<'a> TokenSource for DeviceKeyTokenSource<'_> {
+    fn get(&self, expiry: &DateTime<Utc>) -> String {
+        generate_sas(self.hub, self.device_id, self.key, expiry.timestamp())
+    }
+}
+
 /// Client for communicating with IoT hub
 #[derive(Debug, Clone)]
-pub struct IoTHubClient<'a> {
+pub struct IoTHubClient<'a, TS> {
+    token_source: TS,
     device_id: &'a str,
     #[cfg(not(any(feature = "http-transport", feature = "amqp-transport")))]
     transport: MqttTransport,
@@ -52,75 +126,10 @@ fn generate_sas(hub: &str, device_id: &str, key: &str, expiry_timestamp: i64) ->
     sas
 }
 
-impl<'a> IoTHubClient<'a> {
-    /// Create a new IoT Hub device client using the device's primary key
-    ///
-    /// # Arguments
-    ///
-    /// * `hub` - The IoT hub resource name
-    /// * `device_id` - The registered device to connect as
-    /// * `key` - The primary or secondary key for this device
-    ///
-    /// # Example
-    /// ```no_run
-    /// use azure_iot_sdk::client::IoTHubClient;
-    ///
-    /// #[tokio::main]
-    /// async fn main() {
-    ///     let mut client = IoTHubClient::with_device_key(
-    ///         "iothubname.azure-devices.net",
-    ///         "MyDeviceId",
-    ///         "TheAccessKey".into()).await;
-    /// }
-    /// ```
-    pub async fn with_device_key(hub: &str, device_id: &'a str, key: String) -> IoTHubClient<'a> {
-        let expiry = Utc::now() + Duration::days(1);
-        let expiry = expiry.timestamp();
-
-        let sas = generate_sas(&hub, &device_id, &key, expiry);
-
-        Self::new(hub, device_id, sas).await
-    }
-
-    /// Create a new IoT Hub device client using the device's connection string
-    ///
-    /// # Arguments
-    ///
-    /// * `connection_string` - The connection string for this device and iot hub
-    ///
-    /// # Example
-    /// ```no_run
-    /// use azure_iot_sdk::client::IoTHubClient;
-    ///
-    /// #[tokio::main]
-    /// async fn main() {
-    ///     let mut client = IoTHubClient::from_connection_string(
-    ///         "HostName=iothubname.azure-devices.net;DeviceId=MyDeviceId;SharedAccessKey=TheAccessKey").await;
-    /// }
-    /// ```
-    pub async fn from_connection_string(connection_string: &'a str) -> IoTHubClient<'a> {
-        let mut key = None;
-        let mut device_id = None;
-        let mut hub = None;
-
-        let parts: Vec<&str> = connection_string.split(';').collect();
-        for p in parts {
-            let s: Vec<&str> = p.split('=').collect();
-            match s[0] {
-                SHAREDACCESSKEY_KEY => key = Some(s[1].to_string()),
-                DEVICEID_KEY => device_id = Some(s[1]),
-                HOSTNAME_KEY => hub = Some(s[1]),
-                _ => (), // Ignore extraneous component in the connection string
-            }
-        }
-
-        // let key = key.ok_or(ErrorKind::ConnectionStringMissingRequiredParameter(
-        //     SHAREDACCESSKEY_KEY,
-        // ))?;
-
-        Self::with_device_key(hub.unwrap(), device_id.unwrap(), key.unwrap()).await
-    }
-
+impl<'a, TS> IoTHubClient<'a, TS>
+where
+    TS: TokenSource + Sync + Send,
+{
     /// Create a new IoT Hub device client using a shared access signature
     ///
     /// # Arguments
@@ -138,17 +147,18 @@ impl<'a> IoTHubClient<'a> {
     ///     let mut client = IoTHubClient::new(
     ///         "iothubname.azure-devices.net",
     ///         "MyDeviceId",
-    ///         "SharedAccessSignature sr=iothubname.azure-devices.net%2Fdevices%2MyDeviceId&sig=vn0%2BgyIUKgaBhEU0ypyOhJ0gPK5fSY1TKdvcJ1HxhnQ%3D&se=1587123309".into()).await;
+    ///         "SharedAccessSignature sr=iothubname.azure-devices.net%2Fdevices%2MyDeviceId&sig=vn0%2BgyIUKgaBhEU0ypyOhJ0gPK5fSY1TKdvcJ1HxhnQ%3D&se=1587123309").await;
     /// }
     /// ```
-    pub async fn new(hub_name: &str, device_id: &'a str, sas: String) -> IoTHubClient<'a> {
+    pub async fn new(hub_name: &str, device_id: &'a str, token_source: TS) -> IoTHubClient<'a, TS> {
         #[cfg(not(any(feature = "http-transport", feature = "amqp-transport")))]
-        let transport = MqttTransport::new(hub_name, device_id, sas).await;
+        let transport = MqttTransport::new(hub_name, device_id, &token_source).await;
 
         #[cfg(feature = "http-transport")]
         let transport = HttpTransport::new(hub_name, device_id, sas).await;
 
         Self {
+            token_source,
             device_id,
             transport,
         }
@@ -189,6 +199,13 @@ impl<'a> IoTHubClient<'a> {
     pub async fn send_message(&mut self, message: Message) {
         self.transport.send_message(message).await;
     }
+
+    // pub async fn get_receiver(&mut self) -> mpsc::Receiver<MessageType> {
+    //     // create mpsc sender/receiver
+    //     // create receive loop
+    //     // return receiver for client to get messages on
+    //     tokio::spawn(receive(, device_id, sender, receiver))
+    // }
 
     /// Send a property update from the device to the cloud
     ///

@@ -26,12 +26,13 @@ async fn main() {
 
     let config = DeviceConfig::from_env().unwrap();
 
-    let mut client = IoTHubClient::with_device_key(
+    let token_source = DeviceKeyTokenSource::new(
         &config.hostname,
         &config.device_id,
-        config.shared_access_key,
-    )
-    .await;
+        &config.shared_access_key,
+    );
+
+    let mut client = IoTHubClient::new(&config.hostname, &config.device_id, token_source).await;
 
     info!("Initialized client");
 

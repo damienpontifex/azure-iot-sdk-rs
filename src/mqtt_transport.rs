@@ -11,7 +11,11 @@ use tokio_tls::{TlsConnector, TlsStream};
 use async_trait::async_trait;
 
 use crate::message::{DirectMethodResponse, Message, SendType};
-use crate::transport::{MessageHandler, Transport};
+use crate::{
+    client::TokenSource,
+    transport::{MessageHandler, Transport},
+};
+use chrono::{Duration, Utc};
 
 // Incoming topic names
 const METHOD_POST_TOPIC_FILTER: &str = "$iothub/methods/POST/#";
@@ -172,7 +176,7 @@ where
 /// * `read_socket` -
 /// * `device_id` -
 /// * `sender` -
-async fn receive<S>(
+pub(crate) async fn receive<S>(
     mut read_socket: S,
     device_id: String,
     mut sender: Sender<SendType>,
@@ -277,7 +281,10 @@ pub(crate) struct MqttTransport {
 
 #[async_trait]
 impl Transport for MqttTransport {
-    async fn new(hub_name: &str, device_id: &str, sas: String) -> Self {
+    async fn new<TS>(hub_name: &str, device_id: &str, token_source: &TS) -> Self
+    where
+        TS: TokenSource + Sync + Send,
+    {
         let mut socket = tcp_connect(&hub_name).await;
 
         let mut conn = ConnectPacket::new("MQTT", device_id);
@@ -288,7 +295,9 @@ impl Transport for MqttTransport {
             "{}/{}/?api-version=2018-06-30",
             hub_name, device_id
         )));
-        conn.set_password(Some(sas.to_string()));
+
+        let expiry = Utc::now() + Duration::days(1);
+        conn.set_password(Some(token_source.get(&expiry).to_string()));
 
         let mut buf = Vec::new();
         conn.encode(&mut buf).unwrap();

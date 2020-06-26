@@ -1,7 +1,10 @@
 #[macro_use]
 extern crate log;
 
-use azure_iot_sdk::{client::IoTHubClient, message::Message};
+use azure_iot_sdk::{
+    client::{DeviceKeyTokenSource, IoTHubClient},
+    message::Message,
+};
 
 use chrono::{DateTime, Utc};
 use tokio::time;
@@ -81,12 +84,13 @@ async fn main() {
 
     let config = DeviceConfig::from_env().unwrap();
 
-    let mut client = IoTHubClient::with_device_key(
+    let token_source = DeviceKeyTokenSource::new(
         &config.hostname,
         &config.device_id,
-        config.shared_access_key,
-    )
-    .await;
+        &config.shared_access_key,
+    );
+
+    let mut client = IoTHubClient::new(&config.hostname, &config.device_id, token_source).await;
 
     info!("Initialized client");
 

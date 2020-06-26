@@ -11,7 +11,7 @@ license = "MIT"
 readme = "README.md"
 
 [features]
-default = ["c2d-messages", "direct-methods", "twin-properties"]
+default = ["c2d-messages", "direct-methods", "twin-properties"] #, "with-provision"]
 direct-methods = []
 twin-properties = []
 c2d-messages = []

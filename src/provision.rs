@@ -1,9 +1,9 @@
 use chrono::{Duration, Utc};
-use hyper::{Body, Client, header, Method, Request, StatusCode};
+use hyper::{header, Body, Client, Method, Request, StatusCode};
 use hyper_tls::HttpsConnector;
 use serde::export::Formatter;
 
-use crate::client::{generate_token, IoTHubClient};
+use crate::client::{generate_token, DeviceKeyTokenSource, IoTHubClient};
 
 const DPS_HOST: &str = "https://global.azure-devices-provisioning.net";
 const DPS_API_VERSION: &str = "api-version=2018-11-01";
@@ -53,7 +53,7 @@ impl std::fmt::Display for ErrorKind {
 
 impl std::error::Error for ErrorKind {}
 
-impl IoTHubClient<'_> {
+impl IoTHubClient<'_, TS> {
     /// Create a new IoT Hub device client using the device provisioning service
     ///
     /// # Arguments
@@ -153,7 +153,9 @@ impl IoTHubClient<'_> {
         if hubname.is_empty() {
             return Err(Box::new(ErrorKind::FailedToGetIotHub));
         }
-        Ok(IoTHubClient::with_device_key(&hubname, device_id, device_key.to_string()).await)
+
+        let token_source = DeviceKeyTokenSource::new(&hubname, device_id, device_key);
+        Ok(IoTHubClient::new(&hubname, device_id, token_source).await)
     }
 }
 
