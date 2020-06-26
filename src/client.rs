@@ -24,18 +24,24 @@ where
     ///
     /// * `hub_name` - The IoT hub resource name
     /// * `device_id` - The registered device to connect as
-    /// * `sas` - The shared access signature for this device to connect with
+    /// * `token_source` - The token source to provide authentication
     ///
     /// # Example
     /// ```no_run
-    /// use azure_iot_sdk::client::IoTHubClient;
+    /// use azure_iot_sdk::{IoTHubClient, DeviceKeyTokenSource, MqttTransport};
     ///
     /// #[tokio::main]
     /// async fn main() {
-    ///     let mut client = IoTHubClient::new(
-    ///         "iothubname.azure-devices.net",
-    ///         "MyDeviceId",
-    ///         "SharedAccessSignature sr=iothubname.azure-devices.net%2Fdevices%2MyDeviceId&sig=vn0%2BgyIUKgaBhEU0ypyOhJ0gPK5fSY1TKdvcJ1HxhnQ%3D&se=1587123309").await;
+    ///     let iothub_hostname = "iothubname.azure-devices.net";
+    ///     let device_id = "MyDeviceId";
+    ///     let token_source = DeviceKeyTokenSource::new(
+    ///         iothub_hostname,
+    ///         device_id,
+    ///         "TheAccessKey",
+    ///     );
+    ///
+    ///     let mut client =
+    ///         IoTHubClient::<MqttTransport>::new(iothub_hostname, device_id, token_source).await;
     /// }
     /// ```
     pub async fn new<TS>(
@@ -63,16 +69,21 @@ where
     ///
     /// # Example
     /// ```no_run
-    /// use azure_iot_sdk::client::IoTHubClient;
-    /// use azure_iot_sdk::message::Message;
     /// use tokio::time;
+    /// use azure_iot_sdk::{IoTHubClient, DeviceKeyTokenSource, MqttTransport};
     ///
     /// #[tokio::main]
     /// async fn main() {
-    ///     let mut client = IoTHubClient::with_device_key(
-    ///         "iothubname.azure-devices.net",
-    ///         "MyDeviceId",
-    ///         "TheAccessKey".into()).await;
+    ///     let iothub_hostname = "iothubname.azure-devices.net";
+    ///     let device_id = "MyDeviceId";
+    ///     let token_source = DeviceKeyTokenSource::new(
+    ///         iothub_hostname,
+    ///         device_id,
+    ///         "TheAccessKey",
+    ///     );
+    ///
+    ///     let mut client =
+    ///         IoTHubClient::<MqttTransport>::new(iothub_hostname, device_id, token_source).await;
     ///
     ///     let mut interval = time::interval(time::Duration::from_secs(1));
     ///     let mut count: u32 = 0;
@@ -134,14 +145,20 @@ where
     ///
     /// # Example
     /// ```no_run
-    /// use azure_iot_sdk::client::IoTHubClient;
+    /// use azure_iot_sdk::{IoTHubClient, DeviceKeyTokenSource, MqttTransport};
     ///
     /// #[tokio::main]
     /// async fn main() {
-    ///     let mut client = IoTHubClient::with_device_key(
-    ///         "iothubname.azure-devices.net",
-    ///         "MyDeviceId",
-    ///         "TheAccessKey".into()).await;
+    ///     let iothub_hostname = "iothubname.azure-devices.net";
+    ///     let device_id = "MyDeviceId";
+    ///     let token_source = DeviceKeyTokenSource::new(
+    ///         iothub_hostname,
+    ///         device_id,
+    ///         "TheAccessKey",
+    ///     );
+    ///
+    ///     let mut client =
+    ///         IoTHubClient::<MqttTransport>::new(iothub_hostname, device_id, token_source).await;
     ///
     ///     client
     ///        .on_message(|msg| {
@@ -164,14 +181,20 @@ where
     ///
     /// # Example
     /// ```no_run
-    /// use azure_iot_sdk::client::IoTHubClient;
+    /// use azure_iot_sdk::{IoTHubClient, DeviceKeyTokenSource, MqttTransport};
     ///
     /// #[tokio::main]
     /// async fn main() {
-    ///     let mut client = IoTHubClient::with_device_key(
-    ///         "iothubname.azure-devices.net",
-    ///         "MyDeviceId",
-    ///         "TheAccessKey".into()).await;
+    ///     let iothub_hostname = "iothubname.azure-devices.net";
+    ///     let device_id = "MyDeviceId";
+    ///     let token_source = DeviceKeyTokenSource::new(
+    ///         iothub_hostname,
+    ///         device_id,
+    ///         "TheAccessKey",
+    ///     );
+    ///
+    ///     let mut client =
+    ///         IoTHubClient::<MqttTransport>::new(iothub_hostname, device_id, token_source).await;
     ///
     ///     client
     ///        .on_direct_method(|method_name, msg| {
@@ -198,14 +221,20 @@ where
     ///
     /// # Example
     /// ```no_run
-    /// use azure_iot_sdk::client::IoTHubClient;
+    /// use azure_iot_sdk::{IoTHubClient, DeviceKeyTokenSource, MqttTransport};
     ///
     /// #[tokio::main]
     /// async fn main() {
-    ///     let mut client = IoTHubClient::with_device_key(
-    ///         "iothubname.azure-devices.net",
-    ///         "MyDeviceId",
-    ///         "TheAccessKey".into()).await;
+    ///     let iothub_hostname = "iothubname.azure-devices.net";
+    ///     let device_id = "MyDeviceId";
+    ///     let token_source = DeviceKeyTokenSource::new(
+    ///         iothub_hostname,
+    ///         device_id,
+    ///         "TheAccessKey",
+    ///     );
+    ///
+    ///     let mut client =
+    ///         IoTHubClient::<MqttTransport>::new(iothub_hostname, device_id, token_source).await;
     ///
     ///     client
     ///        .on_twin_update(|msg| {
@@ -226,12 +255,4 @@ where
             )
             .await;
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_mqtt_connect() {}
 }

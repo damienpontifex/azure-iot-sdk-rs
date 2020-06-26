@@ -23,14 +23,21 @@
 //!
 //! A simple client
 //! ```no_run
-//! use azure_iot_sdk::client::IoTHubClient;
-//! use azure_iot_sdk::message::Message;
 //! use tokio::time;
+//! use azure_iot_sdk::{IoTHubClient, DeviceKeyTokenSource, MqttTransport};
 //!
 //! #[tokio::main]
 //! async fn main() {
+//!     let iothub_hostname = "iothubname.azure-devices.net";
+//!     let device_id = "MyDeviceId";
+//!     let token_source = DeviceKeyTokenSource::new(
+//!         iothub_hostname,
+//!         device_id,
+//!         "TheAccessKey",
+//!     );
+//!
 //!     let mut client =
-//!     IoTHubClient::from_connection_string("HostName=iothubname.azure-devices.net;DeviceId=MyDeviceId;SharedAccessKey=TheAccessKey").await;
+//!         IoTHubClient::<MqttTransport>::new(iothub_hostname, device_id, token_source).await;
 //!
 //!     let mut interval = time::interval(time::Duration::from_secs(1));
 //!     let mut count: u32 = 0;
@@ -70,6 +77,7 @@ pub use message::*;
 ///
 #[cfg(not(any(feature = "http-transport", feature = "amqp-transport")))]
 pub mod mqtt_transport;
+#[cfg(not(any(feature = "http-transport", feature = "amqp-transport")))]
 pub use mqtt_transport::*;
 ///
 pub mod token;
