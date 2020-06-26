@@ -60,16 +60,20 @@ pub const SDK_VERSION: &str = std::env!("CARGO_PKG_VERSION");
 
 /// The IoT Hub client
 pub mod client;
+pub use client::*;
 
 #[cfg(feature = "http-transport")]
 pub(crate) mod http_transport;
 /// Message types for communicating with the IoT Hub
 pub mod message;
+pub use message::*;
 ///
 #[cfg(not(any(feature = "http-transport", feature = "amqp-transport")))]
 pub mod mqtt_transport;
+pub use mqtt_transport::*;
 ///
 pub mod token;
+pub use token::*;
 /// Transport types
 pub mod transport;
 
