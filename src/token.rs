@@ -130,9 +130,4 @@ mod tests {
         let expiry = Utc.ymd(2020, 6, 28).and_hms(14, 08, 25);
         assert_eq!(key_source.get(&expiry), "SharedAccessSignature sr=pontifex.azure-devices.net%2Fdevices%2FFirstDevice&sig=CKYVArtLm72J2UNWLb4V3XqPc679Ig3LX83G3nPExUc%3D&se=1593353305");
     }
-
-    // #[test]
-    // fn test_add() {
-    //     assert_eq!(generate_sas("myiothub.azure-devices.net", "FirstDevice", "O+H9VTcdJP0Tqkl7bh4nVG0OJNrAataMpuWB54D0VEc=", 1_587_123_309), "SharedAccessSignature sr=myiothub.azure-devices.net%2Fdevices%2FFirstDevice&sig=vn0%2BgyIUKgaBhEU0ypyOhJ0gPK5fSY1TKdvcJ1HxhnQ%3D&se=1587123309".to_string());
-    // }
 }
