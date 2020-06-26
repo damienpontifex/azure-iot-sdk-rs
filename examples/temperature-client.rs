@@ -85,7 +85,8 @@ async fn main() {
         &config.hostname,
         &config.device_id,
         &config.shared_access_key,
-    );
+    )
+    .unwrap();
 
     let mut client =
         IoTHubClient::<MqttTransport>::new(&config.hostname, &config.device_id, token_source).await;

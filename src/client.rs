@@ -38,7 +38,7 @@ where
     ///         iothub_hostname,
     ///         device_id,
     ///         "TheAccessKey",
-    ///     );
+    ///     ).unwrap();
     ///
     ///     let mut client =
     ///         IoTHubClient::<MqttTransport>::new(iothub_hostname, device_id, token_source).await;
@@ -80,7 +80,7 @@ where
     ///         iothub_hostname,
     ///         device_id,
     ///         "TheAccessKey",
-    ///     );
+    ///     ).unwrap();
     ///
     ///     let mut client =
     ///         IoTHubClient::<MqttTransport>::new(iothub_hostname, device_id, token_source).await;
@@ -155,7 +155,7 @@ where
     ///         iothub_hostname,
     ///         device_id,
     ///         "TheAccessKey",
-    ///     );
+    ///     ).unwrap();
     ///
     ///     let mut client =
     ///         IoTHubClient::<MqttTransport>::new(iothub_hostname, device_id, token_source).await;
@@ -191,7 +191,7 @@ where
     ///         iothub_hostname,
     ///         device_id,
     ///         "TheAccessKey",
-    ///     );
+    ///     ).unwrap();
     ///
     ///     let mut client =
     ///         IoTHubClient::<MqttTransport>::new(iothub_hostname, device_id, token_source).await;
@@ -231,7 +231,7 @@ where
     ///         iothub_hostname,
     ///         device_id,
     ///         "TheAccessKey",
-    ///     );
+    ///     ).unwrap();
     ///
     ///     let mut client =
     ///         IoTHubClient::<MqttTransport>::new(iothub_hostname, device_id, token_source).await;

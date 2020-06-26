@@ -7,8 +7,19 @@ const HOSTNAME_KEY: &str = "HostName";
 const SHAREDACCESSKEY_KEY: &str = "SharedAccessKey";
 
 ///
-pub trait TokenSource {
+#[derive(Debug)]
+pub enum TokenError {
     ///
+    ConnectionStringMissingRequiredParameter(&'static str),
+    ///
+    InvalidKeyFormat,
+    ///
+    InvalidKeyLength,
+}
+
+/// Provider for authentication
+pub trait TokenSource {
+    /// Get the authentication value from the source
     fn get(&self, expiry: &DateTime<Utc>) -> String;
 }
 
@@ -18,14 +29,14 @@ impl std::fmt::Debug for dyn TokenSource {
     }
 }
 
-///
+/// Provide an existing SAS as authentication source
 #[derive(Debug, Clone)]
 pub struct SasTokenSource<'a> {
     sas: &'a str,
 }
 
 impl<'a> SasTokenSource<'_> {
-    ///
+    /// Make the token source with the given SAS
     pub fn new(sas: &'a str) -> SasTokenSource<'_> {
         SasTokenSource { sas }
     }
@@ -37,7 +48,7 @@ impl<'a> TokenSource for SasTokenSource<'_> {
     }
 }
 
-///
+/// Authenticate using the devices key
 #[derive(Debug, Clone)]
 pub struct DeviceKeyTokenSource<'a> {
     resource_uri: String,
@@ -45,16 +56,27 @@ pub struct DeviceKeyTokenSource<'a> {
 }
 
 impl<'a> DeviceKeyTokenSource<'_> {
-    ///
-    pub fn new(hub: &str, device_id: &str, key: &'a str) -> DeviceKeyTokenSource<'a> {
-        DeviceKeyTokenSource {
+    /// Make the source from the devices individual details
+    pub fn new(
+        hub: &str,
+        device_id: &str,
+        key: &'a str,
+    ) -> Result<DeviceKeyTokenSource<'a>, TokenError> {
+        // Verify key is base64
+        let b64_key = base64::decode(&key).map_err(|_| TokenError::InvalidKeyFormat)?;
+        // Verify key is the right length for Hmac
+        Hmac::<Sha256>::new_varkey(&b64_key).map_err(|_| TokenError::InvalidKeyLength)?;
+
+        Ok(DeviceKeyTokenSource {
             resource_uri: format!("{}%2Fdevices%2F{}", hub, device_id),
             key,
-        }
+        })
     }
 
-    ///
-    pub fn new_from_connection_string(connection_string: &'a str) -> DeviceKeyTokenSource<'a> {
+    /// Make the source from a connection string for the device
+    pub fn new_from_connection_string(
+        connection_string: &'a str,
+    ) -> Result<DeviceKeyTokenSource<'a>, TokenError> {
         let mut key = None;
         let mut device_id = None;
         let mut hub = None;
@@ -70,10 +92,17 @@ impl<'a> DeviceKeyTokenSource<'_> {
             }
         }
 
-        // let key = key.ok_or(ErrorKind::ConnectionStringMissingRequiredParameter(
-        //     SHAREDACCESSKEY_KEY,
-        // ))?;
-        Self::new(hub.unwrap(), device_id.unwrap(), key.unwrap())
+        let hub = hub.ok_or(TokenError::ConnectionStringMissingRequiredParameter(
+            HOSTNAME_KEY,
+        ))?;
+        let device_id = device_id.ok_or(TokenError::ConnectionStringMissingRequiredParameter(
+            DEVICEID_KEY,
+        ))?;
+        let key = key.ok_or(TokenError::ConnectionStringMissingRequiredParameter(
+            SHAREDACCESSKEY_KEY,
+        ))?;
+
+        Ok(Self::new(hub, device_id, key)?)
     }
 }
 
@@ -95,6 +124,7 @@ impl<'a> TokenSource for DeviceKeyTokenSource<'_> {
 }
 
 pub(crate) fn generate_token(key: &str, message: &str) -> String {
+    // Checked base64 and hmac in new so should be safe to unwrap here
     let key = base64::decode(&key).unwrap();
     let mut mac = Hmac::<Sha256>::new_varkey(&key).unwrap();
     mac.input(message.as_bytes());
@@ -124,7 +154,8 @@ mod tests {
             "pontifex.azure-devices.net",
             "FirstDevice",
             "O+H9VTcdJP0TQkl7bh4nVG0OJNrEataMpuWB54D0VEc=",
-        );
+        )
+        .unwrap();
         let expiry = Utc.ymd(2020, 6, 28).and_hms(14, 08, 25);
         assert_eq!(key_source.get(&expiry), "SharedAccessSignature sr=pontifex.azure-devices.net%2Fdevices%2FFirstDevice&sig=CKYVArtLm72J2UNWLb4V3XqPc679Ig3LX83G3nPExUc%3D&se=1593353305");
     }

@@ -161,7 +161,7 @@ where
             return Err(Box::new(ErrorKind::FailedToGetIotHub));
         }
 
-        let token_source = DeviceKeyTokenSource::new(&hubname, device_id, device_key);
+        let token_source = DeviceKeyTokenSource::new(&hubname, device_id, device_key).unwrap();
         Ok(IoTHubClient::new(&hubname, device_id, token_source).await)
     }
 }
