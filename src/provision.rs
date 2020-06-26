@@ -53,7 +53,7 @@ impl std::fmt::Display for ErrorKind {
 
 impl std::error::Error for ErrorKind {}
 
-impl IoTHubClient {
+impl IoTHubClient<'_> {
     /// Create a new IoT Hub device client using the device provisioning service
     ///
     /// # Arguments
@@ -80,12 +80,12 @@ impl IoTHubClient {
     /// }
     /// ```
     #[cfg(feature = "with-provision")]
-    pub async fn from_provision_service(
+    pub async fn from_provision_service<'a>(
         scope_id: &str,
-        device_id: &str,
+        device_id: &'a str,
         device_key: &str,
         max_retries: i32,
-    ) -> Result<IoTHubClient, Box<dyn std::error::Error>> {
+    ) -> Result<IoTHubClient<'a>, Box<dyn std::error::Error>> {
         let expiry = Utc::now() + Duration::days(1);
         let expiry = expiry.timestamp();
         let sas = generate_registration_sas(scope_id, device_id, device_key, expiry);
@@ -153,10 +153,7 @@ impl IoTHubClient {
         if hubname.is_empty() {
             return Err(Box::new(ErrorKind::FailedToGetIotHub));
         }
-        Ok(
-            IoTHubClient::with_device_key(hubname, device_id.to_string(), device_key.to_string())
-                .await,
-        )
+        Ok(IoTHubClient::with_device_key(&hubname, device_id, device_key.to_string()).await)
     }
 }
 

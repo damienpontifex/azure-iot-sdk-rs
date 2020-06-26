@@ -15,8 +15,8 @@ const SHAREDACCESSKEY_KEY: &str = "SharedAccessKey";
 
 /// Client for communicating with IoT hub
 #[derive(Debug, Clone)]
-pub struct IoTHubClient {
-    device_id: String,
+pub struct IoTHubClient<'a> {
+    device_id: &'a str,
     #[cfg(not(any(feature = "http-transport", feature = "amqp-transport")))]
     transport: MqttTransport,
     #[cfg(feature = "http-transport")]
@@ -52,7 +52,7 @@ fn generate_sas(hub: &str, device_id: &str, key: &str, expiry_timestamp: i64) ->
     sas
 }
 
-impl IoTHubClient {
+impl<'a> IoTHubClient<'a> {
     /// Create a new IoT Hub device client using the device's primary key
     ///
     /// # Arguments
@@ -68,12 +68,12 @@ impl IoTHubClient {
     /// #[tokio::main]
     /// async fn main() {
     ///     let mut client = IoTHubClient::with_device_key(
-    ///         "iothubname.azure-devices.net".into(),
-    ///         "MyDeviceId".into(),
+    ///         "iothubname.azure-devices.net",
+    ///         "MyDeviceId",
     ///         "TheAccessKey".into()).await;
     /// }
     /// ```
-    pub async fn with_device_key(hub: String, device_id: String, key: String) -> Self {
+    pub async fn with_device_key(hub: &str, device_id: &'a str, key: String) -> IoTHubClient<'a> {
         let expiry = Utc::now() + Duration::days(1);
         let expiry = expiry.timestamp();
 
@@ -98,7 +98,7 @@ impl IoTHubClient {
     ///         "HostName=iothubname.azure-devices.net;DeviceId=MyDeviceId;SharedAccessKey=TheAccessKey").await;
     /// }
     /// ```
-    pub async fn from_connection_string(connection_string: &str) -> Self {
+    pub async fn from_connection_string(connection_string: &'a str) -> IoTHubClient<'a> {
         let mut key = None;
         let mut device_id = None;
         let mut hub = None;
@@ -108,8 +108,8 @@ impl IoTHubClient {
             let s: Vec<&str> = p.split('=').collect();
             match s[0] {
                 SHAREDACCESSKEY_KEY => key = Some(s[1].to_string()),
-                DEVICEID_KEY => device_id = Some(s[1].to_string()),
-                HOSTNAME_KEY => hub = Some(s[1].to_string()),
+                DEVICEID_KEY => device_id = Some(s[1]),
+                HOSTNAME_KEY => hub = Some(s[1]),
                 _ => (), // Ignore extraneous component in the connection string
             }
         }
@@ -136,17 +136,17 @@ impl IoTHubClient {
     /// #[tokio::main]
     /// async fn main() {
     ///     let mut client = IoTHubClient::new(
-    ///         "iothubname.azure-devices.net".into(),
-    ///         "MyDeviceId".into(),
+    ///         "iothubname.azure-devices.net",
+    ///         "MyDeviceId",
     ///         "SharedAccessSignature sr=iothubname.azure-devices.net%2Fdevices%2MyDeviceId&sig=vn0%2BgyIUKgaBhEU0ypyOhJ0gPK5fSY1TKdvcJ1HxhnQ%3D&se=1587123309".into()).await;
     /// }
     /// ```
-    pub async fn new(hub_name: String, device_id: String, sas: String) -> Self {
+    pub async fn new(hub_name: &str, device_id: &'a str, sas: String) -> IoTHubClient<'a> {
         #[cfg(not(any(feature = "http-transport", feature = "amqp-transport")))]
-        let transport = MqttTransport::new(hub_name, device_id.clone(), sas).await;
+        let transport = MqttTransport::new(hub_name, device_id, sas).await;
 
         #[cfg(feature = "http-transport")]
-            let transport = HttpTransport::new(hub_name, device_id.clone(), sas).await;
+        let transport = HttpTransport::new(hub_name, device_id, sas).await;
 
         Self {
             device_id,
@@ -165,8 +165,8 @@ impl IoTHubClient {
     /// #[tokio::main]
     /// async fn main() {
     ///     let mut client = IoTHubClient::with_device_key(
-    ///         "iothubname.azure-devices.net".into(),
-    ///         "MyDeviceId".into(),
+    ///         "iothubname.azure-devices.net",
+    ///         "MyDeviceId",
     ///         "TheAccessKey".into()).await;
     ///
     ///     let mut interval = time::interval(time::Duration::from_secs(1));
@@ -234,8 +234,8 @@ impl IoTHubClient {
     /// #[tokio::main]
     /// async fn main() {
     ///     let mut client = IoTHubClient::with_device_key(
-    ///         "iothubname.azure-devices.net".into(),
-    ///         "MyDeviceId".into(),
+    ///         "iothubname.azure-devices.net",
+    ///         "MyDeviceId",
     ///         "TheAccessKey".into()).await;
     ///
     ///     client
@@ -264,8 +264,8 @@ impl IoTHubClient {
     /// #[tokio::main]
     /// async fn main() {
     ///     let mut client = IoTHubClient::with_device_key(
-    ///         "iothubname.azure-devices.net".into(),
-    ///         "MyDeviceId".into(),
+    ///         "iothubname.azure-devices.net",
+    ///         "MyDeviceId",
     ///         "TheAccessKey".into()).await;
     ///
     ///     client
@@ -298,8 +298,8 @@ impl IoTHubClient {
     /// #[tokio::main]
     /// async fn main() {
     ///     let mut client = IoTHubClient::with_device_key(
-    ///         "iothubname.azure-devices.net".into(),
-    ///         "MyDeviceId".into(),
+    ///         "iothubname.azure-devices.net",
+    ///         "MyDeviceId",
     ///         "TheAccessKey".into()).await;
     ///
     ///     client
