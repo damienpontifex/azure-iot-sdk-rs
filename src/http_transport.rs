@@ -18,8 +18,8 @@ impl Transport for HttpTransport {
         let https = HttpsConnector::new();
         let client = Client::builder().build::<_, hyper::Body>(https);
         HttpTransport {
-            hub_name,
-            device_id,
+            hub_name: hub_name.to_string(),
+            device_id: device_id.to_string(),
             sas,
             client,
         }
