@@ -277,11 +277,11 @@ pub(crate) struct MqttTransport {
 
 #[async_trait]
 impl Transport for MqttTransport {
-    async fn new(hub_name: String, device_id: String, sas: String) -> Self {
+    async fn new(hub_name: &str, device_id: &str, sas: String) -> Self {
         let mut socket = tcp_connect(&hub_name).await;
 
-        let mut conn = ConnectPacket::new("MQTT", &device_id);
-        conn.set_client_identifier(&device_id);
+        let mut conn = ConnectPacket::new("MQTT", device_id);
+        conn.set_client_identifier(device_id);
         conn.set_clean_session(false);
         conn.set_keep_alive(KEEP_ALIVE);
         conn.set_user_name(Some(format!(

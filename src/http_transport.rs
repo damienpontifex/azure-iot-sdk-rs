@@ -14,7 +14,7 @@ pub(crate) struct HttpTransport {
 
 #[async_trait]
 impl Transport for HttpTransport {
-    async fn new(hub_name: String, device_id: String, sas: String) -> Self {
+    async fn new(hub_name: &str, device_id: &str, sas: String) -> Self {
         let https = HttpsConnector::new();
         let client = Client::builder().build::<_, hyper::Body>(https);
         HttpTransport {
