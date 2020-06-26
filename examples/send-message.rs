@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate log;
 
-use azure_iot_sdk::{client::IoTHubClient, message::Message};
+use azure_iot_sdk::{DeviceKeyTokenSource, IoTHubClient, Message, MqttTransport};
 
 use serde::Deserialize;
 
@@ -32,7 +32,8 @@ async fn main() {
         &config.shared_access_key,
     );
 
-    let mut client = IoTHubClient::new(&config.hostname, &config.device_id, token_source).await;
+    let mut client =
+        IoTHubClient::<MqttTransport>::new(&config.hostname, &config.device_id, token_source).await;
 
     info!("Initialized client");
 

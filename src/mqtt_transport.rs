@@ -298,7 +298,10 @@ impl Transport for MqttTransport {
         )));
 
         let expiry = Utc::now() + Duration::days(1);
-        conn.set_password(Some(token_source.get(&expiry).to_string()));
+        trace!("Generating token that will expire at {}", expiry);
+        let token = token_source.get(&expiry);
+        trace!("Using token {}", token);
+        conn.set_password(Some(token));
 
         let mut buf = Vec::new();
         conn.encode(&mut buf).unwrap();
