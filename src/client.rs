@@ -109,12 +109,11 @@ impl<'a> TokenSource for DeviceKeyTokenSource<'_> {
 /// Client for communicating with IoT hub
 #[derive(Debug, Clone)]
 pub struct IoTHubClient<'a, TS> {
-    token_source: TS,
     device_id: &'a str,
     #[cfg(not(any(feature = "http-transport", feature = "amqp-transport")))]
     transport: MqttTransport,
     #[cfg(feature = "http-transport")]
-    transport: HttpTransport,
+    transport: HttpTransport<TS>,
 }
 
 pub(crate) fn generate_token(key: &str, message: &str) -> String {
@@ -154,13 +153,12 @@ where
     /// ```
     pub async fn new(hub_name: &str, device_id: &'a str, token_source: TS) -> IoTHubClient<'a, TS> {
         #[cfg(not(any(feature = "http-transport", feature = "amqp-transport")))]
-        let transport = MqttTransport::new(hub_name, device_id, &token_source).await;
+        let transport = MqttTransport::new(hub_name, device_id, token_source).await;
 
         #[cfg(feature = "http-transport")]
-        let transport = HttpTransport::new(hub_name, device_id, sas).await;
+        let transport = HttpTransport::new(hub_name, device_id, token_source).await;
 
         Self {
-            token_source,
             device_id,
             transport,
         }

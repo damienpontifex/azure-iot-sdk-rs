@@ -2,34 +2,36 @@ use crate::client::TokenSource;
 use crate::message::Message;
 use crate::transport::{MessageHandler, Transport};
 use async_trait::async_trait;
+use chrono::{Duration, Utc};
 use hyper::{client::HttpConnector, header, Body, Client, Method, Request};
 use hyper_tls::HttpsConnector;
 
 #[derive(Debug, Clone)]
-pub(crate) struct HttpTransport {
+pub(crate) struct HttpTransport<TS> {
     hub_name: String,
     device_id: String,
-    sas: String,
+    token_source: TS,
     client: Client<HttpsConnector<HttpConnector>>,
 }
 
 #[async_trait]
-impl Transport for HttpTransport {
-    async fn new<TS>(hub_name: &str, device_id: &str, token_source: &TS) -> Self
-    where
-        TS: TokenSource + Sync + Send,
-    {
+impl<TS> Transport<TS> for HttpTransport<TS>
+where
+    TS: TokenSource + Sync + Send,
+{
+    async fn new(hub_name: &str, device_id: &str, token_source: TS) -> Self {
         let https = HttpsConnector::new();
         let client = Client::builder().build::<_, hyper::Body>(https);
         HttpTransport {
             hub_name: hub_name.to_string(),
             device_id: device_id.to_string(),
-            sas,
+            token_source,
             client,
         }
     }
 
     async fn send_message(&mut self, message: Message) {
+        let token_lifetime = Utc::now() + Duration::days(1);
         let req = Request::builder()
             .method(Method::POST)
             .uri(format!(
@@ -37,7 +39,10 @@ impl Transport for HttpTransport {
                 self.hub_name, self.device_id
             ))
             .header(header::CONTENT_TYPE, "application/json")
-            .header(header::AUTHORIZATION, self.sas.clone())
+            .header(
+                header::AUTHORIZATION,
+                self.token_source.get(&token_lifetime),
+            )
             .body(Body::from(message.body))
             .unwrap();
 

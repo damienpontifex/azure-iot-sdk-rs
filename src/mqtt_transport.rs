@@ -280,8 +280,8 @@ pub(crate) struct MqttTransport {
 }
 
 #[async_trait]
-impl Transport for MqttTransport {
-    async fn new<TS>(hub_name: &str, device_id: &str, token_source: &TS) -> Self
+impl<TS> Transport<TS> for MqttTransport {
+    async fn new(hub_name: &str, device_id: &str, token_source: TS) -> Self
     where
         TS: TokenSource + Sync + Send,
     {

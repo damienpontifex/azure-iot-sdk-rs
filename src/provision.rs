@@ -53,7 +53,7 @@ impl std::fmt::Display for ErrorKind {
 
 impl std::error::Error for ErrorKind {}
 
-impl IoTHubClient<'_, TS>
+impl<'a, TS> IoTHubClient<'a, TS>
 where
     TS: TokenSource + Sync + Send,
 {
@@ -83,12 +83,12 @@ where
     /// }
     /// ```
     #[cfg(feature = "with-provision")]
-    pub async fn from_provision_service<'a>(
+    pub async fn from_provision_service(
         scope_id: &str,
         device_id: &'a str,
-        device_key: &str,
+        device_key: &'a str,
         max_retries: i32,
-    ) -> Result<IoTHubClient<'a, TS>, Box<dyn std::error::Error>> {
+    ) -> Result<IoTHubClient<'a, DeviceKeyTokenSource<'a>>, Box<dyn std::error::Error>> {
         let expiry = Utc::now() + Duration::days(1);
         let expiry = expiry.timestamp();
         let sas = generate_registration_sas(scope_id, device_id, device_key, expiry);
