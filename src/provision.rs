@@ -4,7 +4,8 @@ use hyper_tls::HttpsConnector;
 use serde::export::Formatter;
 
 use crate::{
-    client::{generate_token, DeviceKeyTokenSource, IoTHubClient},
+    client::IoTHubClient,
+    token::{generate_token, DeviceKeyTokenSource},
     transport::Transport,
 };
 

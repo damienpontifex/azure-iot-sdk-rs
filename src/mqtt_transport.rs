@@ -12,7 +12,7 @@ use async_trait::async_trait;
 
 use crate::message::{DirectMethodResponse, Message, SendType};
 use crate::{
-    client::TokenSource,
+    token::TokenSource,
     transport::{MessageHandler, Transport},
 };
 use chrono::{Duration, Utc};
@@ -273,6 +273,7 @@ async fn ping(interval: u16, mut sender: Sender<SendType>) {
     }
 }
 
+///
 #[derive(Debug, Clone)]
 pub struct MqttTransport {
     pub(crate) handler_tx: Sender<MessageHandler>,

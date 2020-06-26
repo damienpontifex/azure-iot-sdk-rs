@@ -2,9 +2,8 @@
 extern crate log;
 
 use azure_iot_sdk::{
-    client::{DeviceKeyTokenSource, IoTHubClient},
-    message::Message,
-    mqtt_transport::MqttTransport,
+    client::IoTHubClient, message::Message, mqtt_transport::MqttTransport,
+    token::DeviceKeyTokenSource,
 };
 
 use chrono::{DateTime, Utc};

@@ -1,4 +1,4 @@
-use crate::{client::TokenSource, message::Message};
+use crate::{message::Message, token::TokenSource};
 use async_trait::async_trait;
 
 ///
