@@ -33,5 +33,5 @@ pub enum MessageHandler {
     ///
     TwinUpdate(Box<dyn Fn(Message) + Send>),
     ///
-    DirectMethod(Box<dyn Fn(String, Message) -> i32 + Send>),
+    DirectMethod(Box<dyn Fn(String, Message) + Send>),
 }

@@ -102,7 +102,7 @@ pub(crate) async fn receive<S>(
     let rx_topic_prefix = device_bound_messages_topic_prefix(&device_id);
     let mut message_handler: Option<Box<dyn Fn(Message) + Send>> = None;
     let mut twin_handler: Option<Box<dyn Fn(Message) + Send>> = None;
-    let mut method_handler: Option<Box<dyn Fn(String, Message) -> i32 + Send>> = None;
+    let mut method_handler: Option<Box<dyn Fn(String, Message) + Send>> = None;
 
     loop {
         tokio::select! {
@@ -160,16 +160,9 @@ pub(crate) async fn receive<S>(
 
                         let method_components: Vec<_> = details.split('/').collect();
 
-                        // If we don't have a handler respond with -1
-                        let mut method_response = -1;
-
                         if let Some(method_handler) = &method_handler {
-                          method_response = method_handler(method_components[0].to_string(), message);
+                          method_handler(method_components[0].to_string(), message);
                         }
-
-                        let request_id = method_components[1][REQUEST_ID_PARAM.len()..].to_string();
-                        let to_respond_with = SendType::RespondToDirectMethod(DirectMethodResponse::new(request_id, method_response, None));
-                        // sender.send(to_respond_with).await.unwrap();
                     }
                 }
                 _ => {}

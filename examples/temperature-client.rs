@@ -106,7 +106,6 @@ async fn main() {
                 method_name,
                 std::str::from_utf8(&msg.body).unwrap()
             );
-            0
         })
         .await;
 
