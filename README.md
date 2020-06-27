@@ -53,16 +53,19 @@ async fn main() {
 
     info!("Initialized client");
 
-    client
-        .on_message(|msg| {
-            println!("Received message {:?}", msg);
-        })
-        .await;
+    let mut recv = client.get_receiver().await;
+    let receive_loop = async {
+        while let Some(msg) = recv.recv().await {
+            match msg {
+                MessageType::C2DMessage(msg) => info!("Received message {:?}", msg),
+                _ => {}
+            }
+        }
+    };
 
     let msg = Message::new(b"Hello, world!".to_vec());
+    let sender = client.send_message(msg);
 
-    client.send_message(msg).await;
-
-    std::thread::park();
+    futures::join!(receive_loop, sender);
 }
 ```
