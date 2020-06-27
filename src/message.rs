@@ -11,7 +11,7 @@ pub enum MessageType {
     /// Cloud updating desired properties
     DesiredPropertyUpdate(Message),
     /// Cloud sending a direct method invocation
-    DirectMethod(DirectMethodInvokation),
+    DirectMethod(DirectMethodInvocation),
 }
 
 /// Instance to respond to a direct method invocation
@@ -122,8 +122,8 @@ impl MessageBuilder {
 
 /// Details about a cloud to device direct method invocation call
 #[derive(Debug)]
-pub struct DirectMethodInvokation {
-    pub(crate) method_name: String,
-    pub(crate) message: Message,
-    pub(crate) request_id: String,
+pub struct DirectMethodInvocation {
+    pub method_name: String,
+    pub message: Message,
+    pub request_id: String,
 }

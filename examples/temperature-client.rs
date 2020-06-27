@@ -1,7 +1,9 @@
 #[macro_use]
 extern crate log;
 
-use azure_iot_sdk::{DeviceKeyTokenSource, IoTHubClient, Message, MqttTransport};
+use azure_iot_sdk::{
+    DeviceKeyTokenSource, DirectMethodResponse, IoTHubClient, Message, MessageType, MqttTransport,
+};
 
 use chrono::{DateTime, Utc};
 use tokio::time;
@@ -93,21 +95,30 @@ async fn main() {
 
     info!("Initialized client");
 
-    client
-        .on_message(|msg| {
-            println!("Received message {:?}", msg);
-        })
-        .await;
-
-    client
-        .on_direct_method(|method_name, msg| {
-            println!(
-                "Received direct method {} {}",
-                method_name,
-                std::str::from_utf8(&msg.body).unwrap()
-            );
-        })
-        .await;
+    let mut recv_client = client.clone();
+    let mut receiver = client.get_receiver().await;
+    let receive_loop = async {
+        loop {
+            while let Some(msg) = receiver.recv().await {
+                match msg {
+                    MessageType::C2DMessage(msg) => info!("Received message {:?}", msg),
+                    MessageType::DirectMethod(msg) => {
+                        info!("Received direct method {:?}", msg);
+                        recv_client
+                            .respond_to_direct_method(DirectMethodResponse::new(
+                                msg.request_id,
+                                0,
+                                Some(std::str::from_utf8(&msg.message.body).unwrap().to_string()),
+                            ))
+                            .await;
+                    }
+                    MessageType::DesiredPropertyUpdate(msg) => {
+                        info!("Desired properties updated {:?}", msg)
+                    }
+                }
+            }
+        }
+    };
 
     // let mut rx = client.get_receiver().unwrap();
     // let mut tx = client.sender();
@@ -176,5 +187,5 @@ async fn main() {
         }
     };
 
-    futures::join!(temp_sender, humidity_sender);
+    futures::join!(receive_loop, temp_sender, humidity_sender);
 }

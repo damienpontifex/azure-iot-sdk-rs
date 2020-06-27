@@ -1,8 +1,6 @@
 use crate::message::Message;
-use crate::{
-    token::TokenSource,
-    transport::{MessageHandler, Transport},
-};
+use crate::{token::TokenSource, transport::Transport, DirectMethodResponse, MessageType};
+use tokio::sync::mpsc::Receiver;
 
 /// Client for communicating with IoT hub
 #[derive(Debug, Clone)]
@@ -141,118 +139,13 @@ where
         self.transport.send_property_update(request_id, body).await;
     }
 
-    /// Define the cloud to device message handler
     ///
-    /// # Example
-    /// ```no_run
-    /// use azure_iot_sdk::{IoTHubClient, DeviceKeyTokenSource, MqttTransport};
-    ///
-    /// #[tokio::main]
-    /// async fn main() {
-    ///     let iothub_hostname = "iothubname.azure-devices.net";
-    ///     let device_id = "MyDeviceId";
-    ///     let token_source = DeviceKeyTokenSource::new(
-    ///         iothub_hostname,
-    ///         device_id,
-    ///         "TheAccessKey",
-    ///     ).unwrap();
-    ///
-    ///     let mut client =
-    ///         IoTHubClient::<MqttTransport>::new(iothub_hostname, device_id, token_source).await;
-    ///
-    ///     client
-    ///        .on_message(|msg| {
-    ///            println!("Received message {:?}", msg);
-    ///        })
-    ///        .await;
-    /// }
-    /// ```
-    #[cfg(feature = "c2d-messages")]
-    pub async fn on_message<T>(&mut self, handler: T)
-    where
-        T: Fn(Message) + Send + 'static,
-    {
-        self.transport
-            .set_message_handler(&self.device_id, MessageHandler::Message(Box::new(handler)))
-            .await;
+    pub async fn get_receiver(&mut self) -> Receiver<MessageType> {
+        self.transport.get_receiver().await
     }
 
-    /// Define the message handler for direct method invocation
     ///
-    /// # Example
-    /// ```no_run
-    /// use azure_iot_sdk::{IoTHubClient, DeviceKeyTokenSource, MqttTransport};
-    ///
-    /// #[tokio::main]
-    /// async fn main() {
-    ///     let iothub_hostname = "iothubname.azure-devices.net";
-    ///     let device_id = "MyDeviceId";
-    ///     let token_source = DeviceKeyTokenSource::new(
-    ///         iothub_hostname,
-    ///         device_id,
-    ///         "TheAccessKey",
-    ///     ).unwrap();
-    ///
-    ///     let mut client =
-    ///         IoTHubClient::<MqttTransport>::new(iothub_hostname, device_id, token_source).await;
-    ///
-    ///     client
-    ///        .on_direct_method(|method_name, msg| {
-    ///             println!("Received direct method {} {}", method_name, std::str::from_utf8(&msg.body).unwrap());
-    ///             0
-    ///         })
-    ///         .await;
-    /// }
-    /// ```
-    #[cfg(feature = "direct-methods")]
-    pub async fn on_direct_method<T>(&mut self, handler: T)
-    where
-        T: Fn(String, Message) -> i32 + Send + 'static,
-    {
-        self.transport
-            .set_message_handler(
-                &self.device_id,
-                MessageHandler::DirectMethod(Box::new(handler)),
-            )
-            .await;
-    }
-
-    /// Define the cloud to device message handler
-    ///
-    /// # Example
-    /// ```no_run
-    /// use azure_iot_sdk::{IoTHubClient, DeviceKeyTokenSource, MqttTransport};
-    ///
-    /// #[tokio::main]
-    /// async fn main() {
-    ///     let iothub_hostname = "iothubname.azure-devices.net";
-    ///     let device_id = "MyDeviceId";
-    ///     let token_source = DeviceKeyTokenSource::new(
-    ///         iothub_hostname,
-    ///         device_id,
-    ///         "TheAccessKey",
-    ///     ).unwrap();
-    ///
-    ///     let mut client =
-    ///         IoTHubClient::<MqttTransport>::new(iothub_hostname, device_id, token_source).await;
-    ///
-    ///     client
-    ///        .on_twin_update(|msg| {
-    ///            println!("Received message {:?}", msg);
-    ///        })
-    ///        .await;
-    /// }
-    /// ```
-    #[cfg(feature = "twin-properties")]
-    pub async fn on_twin_update<T>(&mut self, handler: T)
-    where
-        T: Fn(Message) + Send + 'static,
-    {
-        self.transport
-            .set_message_handler(
-                &self.device_id,
-                MessageHandler::TwinUpdate(Box::new(handler)),
-            )
-            .await;
+    pub async fn respond_to_direct_method(&mut self, response: DirectMethodResponse) {
+        self.transport.respond_to_direct_method(response).await
     }
 }

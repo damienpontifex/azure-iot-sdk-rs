@@ -1,5 +1,6 @@
-use crate::{message::Message, token::TokenSource, DirectMethodResponse};
+use crate::{message::Message, token::TokenSource, DirectMethodResponse, MessageType};
 use async_trait::async_trait;
+use tokio::sync::mpsc::Receiver;
 
 ///
 #[async_trait]
@@ -12,8 +13,6 @@ pub trait Transport {
     async fn send_message(&mut self, message: Message);
     ///
     async fn send_property_update(&mut self, request_id: &str, body: &str);
-    ///
-    async fn set_message_handler(&mut self, device_id: &str, handler: MessageHandler);
 
     ///
     async fn request_twin_properties(&mut self, request_id: &str);
@@ -23,15 +22,6 @@ pub trait Transport {
 
     ///
     async fn ping(&mut self);
-}
 
-///
-// #[derive(Debug)]
-pub enum MessageHandler {
-    ///
-    Message(Box<dyn Fn(Message) + Send>),
-    ///
-    TwinUpdate(Box<dyn Fn(Message) + Send>),
-    ///
-    DirectMethod(Box<dyn Fn(String, Message) + Send>),
+    async fn get_receiver(&mut self) -> Receiver<MessageType>;
 }
