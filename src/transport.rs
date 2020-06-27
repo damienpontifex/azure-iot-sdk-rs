@@ -1,4 +1,4 @@
-use crate::{message::Message, token::TokenSource};
+use crate::{message::Message, token::TokenSource, DirectMethodResponse};
 use async_trait::async_trait;
 
 ///
@@ -14,6 +14,15 @@ pub trait Transport {
     async fn send_property_update(&mut self, request_id: &str, body: &str);
     ///
     async fn set_message_handler(&mut self, device_id: &str, handler: MessageHandler);
+
+    ///
+    async fn request_twin_properties(&mut self, request_id: &str);
+
+    ///
+    async fn respond_to_direct_method(&mut self, response: DirectMethodResponse);
+
+    ///
+    async fn ping(&mut self);
 }
 
 ///

@@ -2,9 +2,10 @@ use mqtt::control::variable_header::ConnectReturnCode;
 use mqtt::packet::*;
 use mqtt::{Encodable, QualityOfService};
 use mqtt::{TopicFilter, TopicName};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncReadExt, AsyncWriteExt, WriteHalf};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
+use tokio::sync::Mutex;
 use tokio::time;
 use tokio_tls::{TlsConnector, TlsStream};
 
@@ -16,6 +17,7 @@ use crate::{
     transport::{MessageHandler, Transport},
 };
 use chrono::{Duration, Utc};
+use std::sync::Arc;
 
 // Incoming topic names
 const METHOD_POST_TOPIC_FILTER: &str = "$iothub/methods/POST/#";
@@ -83,92 +85,6 @@ async fn tcp_connect(iot_hub: &str) -> TlsStream<TcpStream> {
     socket
 }
 
-/// Async loop to create task that will received from mpsc receiver and send to IoT hub
-///
-/// # Arguments
-///
-/// * `write_socket` -
-/// * `device_id` -
-/// * `receiver` -
-async fn create_sender<S>(mut write_socket: S, device_id: String, mut receiver: Receiver<SendType>)
-where
-    S: AsyncWriteExt + Unpin,
-{
-    let send_topic = TopicName::new(cloud_bound_messages_topic(&device_id)).unwrap();
-    while let Some(sent) = receiver.recv().await {
-        match sent {
-            SendType::Message(message) => {
-                // TODO: Append properties and system properties to topic path
-                trace!("Sending message {:?}", message);
-                let publish_packet = PublishPacket::new(
-                    send_topic.clone(),
-                    QoSWithPacketIdentifier::Level0,
-                    message.body,
-                );
-                let mut buf = Vec::new();
-                publish_packet.encode(&mut buf).unwrap();
-                write_socket.write_all(&buf[..]).await.unwrap();
-            }
-            SendType::Ping => {
-                info!("Sending PINGREQ to broker");
-
-                let pingreq_packet = PingreqPacket::new();
-
-                let mut buf = Vec::new();
-                pingreq_packet.encode(&mut buf).unwrap();
-                write_socket.write_all(&buf).await.unwrap();
-            }
-            SendType::RespondToDirectMethod(response) => {
-                // TODO: Append properties and system properties to topic path
-                trace!(
-                    "Responding to direct method with rid = {}",
-                    response.request_id
-                );
-                let publish_packet = PublishPacket::new(
-                    TopicName::new(method_response_topic(response.status, &response.request_id))
-                        .unwrap(),
-                    QoSWithPacketIdentifier::Level0,
-                    response.body,
-                );
-                let mut buf = Vec::new();
-                publish_packet.encode(&mut buf).unwrap();
-                write_socket.write_all(&buf[..]).await.unwrap();
-            }
-            SendType::RequestTwinProperties(request_id) => {
-                trace!(
-                    "Requesting device twin properties with rid = {}",
-                    request_id
-                );
-                let packet = PublishPacket::new(
-                    TopicName::new(twin_get_topic(&request_id)).unwrap(),
-                    QoSWithPacketIdentifier::Level0,
-                    "".as_bytes(),
-                );
-                let mut buf = vec![];
-                packet.encode(&mut buf).unwrap();
-                write_socket.write_all(&buf[..]).await.unwrap();
-            }
-            SendType::Subscribe(topic_filters) => {
-                let subscribe_packet = SubscribePacket::new(10, topic_filters);
-                let mut buf = Vec::new();
-                subscribe_packet.encode(&mut buf).unwrap();
-                write_socket.write_all(&buf[..]).await.unwrap();
-            }
-            SendType::PublishTwinProperties { request_id, body } => {
-                trace!("Publishing twin properties with rid = {}", request_id);
-                let packet = PublishPacket::new(
-                    TopicName::new(twin_update_topic(&request_id)).unwrap(),
-                    QoSWithPacketIdentifier::Level0,
-                    body.as_bytes(),
-                );
-                let mut buf = vec![];
-                packet.encode(&mut buf).unwrap();
-                write_socket.write_all(&buf[..]).await.unwrap();
-            }
-        }
-    }
-}
-
 /// Start receive async loop as task that will send received messages from the cloud onto mpsc
 ///
 /// Arguments
@@ -179,7 +95,6 @@ where
 pub(crate) async fn receive<S>(
     mut read_socket: S,
     device_id: String,
-    mut sender: Sender<SendType>,
     mut receiver: Receiver<MessageHandler>,
 ) where
     S: AsyncReadExt + Unpin,
@@ -254,7 +169,7 @@ pub(crate) async fn receive<S>(
 
                         let request_id = method_components[1][REQUEST_ID_PARAM.len()..].to_string();
                         let to_respond_with = SendType::RespondToDirectMethod(DirectMethodResponse::new(request_id, method_response, None));
-                        sender.send(to_respond_with).await.unwrap();
+                        // sender.send(to_respond_with).await.unwrap();
                     }
                 }
                 _ => {}
@@ -277,7 +192,8 @@ async fn ping(interval: u16, mut sender: Sender<SendType>) {
 #[derive(Debug, Clone)]
 pub struct MqttTransport {
     pub(crate) handler_tx: Sender<MessageHandler>,
-    pub(crate) d2c_sender: Sender<SendType>,
+    write_socket: Arc<Mutex<WriteHalf<TlsStream<TcpStream>>>>,
+    d2c_topic: TopicName,
 }
 
 #[async_trait]
@@ -325,57 +241,127 @@ impl Transport for MqttTransport {
 
         let (read_socket, write_socket) = tokio::io::split(socket);
 
-        let (mut d2c_sender, d2c_receiver) = channel::<SendType>(100);
-        tokio::spawn(create_sender(
-            write_socket,
-            device_id.to_owned(),
-            d2c_receiver,
-        ));
+        // let (mut d2c_sender, d2c_receiver) = channel::<SendType>(100);
+        // tokio::spawn(create_sender(
+        //     write_socket,
+        //     device_id.to_owned(),
+        //     d2c_receiver,
+        // ));
 
-        tokio::spawn(ping(KEEP_ALIVE / 2, d2c_sender.clone()));
+        // tokio::spawn(ping(KEEP_ALIVE / 2, d2c_sender.clone()));
 
         let (handler_tx, handler_rx) = channel::<MessageHandler>(3);
         if cfg!(feature = "direct-methods")
             || cfg!(feature = "twin-properties")
             || cfg!(feature = "c2d-messages")
         {
-            let sender = d2c_sender.clone();
-            tokio::spawn(receive(
-                read_socket,
-                device_id.to_owned(),
-                sender,
-                handler_rx,
-            ));
+            tokio::spawn(receive(read_socket, device_id.to_owned(), handler_rx));
         }
 
-        #[cfg(feature = "twin-properties")]
-        {
-            // Send empty message so hub will respond with device twin data
-            d2c_sender
-                .send(SendType::RequestTwinProperties("0".into()))
-                .await
-                .unwrap();
-        }
+        // #[cfg(feature = "twin-properties")]
+        // {
+        //     // Send empty message so hub will respond with device twin data
+        //     d2c_sender
+        //         .send(SendType::RequestTwinProperties("0".into()))
+        //         .await
+        //         .unwrap();
+        // }
 
         Self {
             handler_tx,
-            d2c_sender,
+            write_socket: Arc::new(Mutex::new(write_socket)),
+            d2c_topic: TopicName::new(cloud_bound_messages_topic(&device_id)).unwrap(),
         }
     }
 
     async fn send_message(&mut self, message: Message) {
-        self.d2c_sender
-            .send(SendType::Message(message))
+        // TODO: Append properties and system properties to topic path
+        trace!("Sending message {:?}", message);
+        let publish_packet = PublishPacket::new(
+            self.d2c_topic.clone(),
+            QoSWithPacketIdentifier::Level0,
+            message.body,
+        );
+        let mut buf = Vec::new();
+        publish_packet.encode(&mut buf).unwrap();
+
+        self.write_socket
+            .lock()
+            .await
+            .write_all(&buf[..])
             .await
             .unwrap();
     }
 
     async fn send_property_update(&mut self, request_id: &str, body: &str) {
-        self.d2c_sender
-            .send(SendType::PublishTwinProperties {
-                request_id: request_id.to_string(),
-                body: body.to_string(),
-            })
+        trace!("Publishing twin properties with rid = {}", request_id);
+        let packet = PublishPacket::new(
+            TopicName::new(twin_update_topic(&request_id)).unwrap(),
+            QoSWithPacketIdentifier::Level0,
+            body.as_bytes(),
+        );
+        let mut buf = vec![];
+        packet.encode(&mut buf).unwrap();
+        self.write_socket
+            .lock()
+            .await
+            .write_all(&buf[..])
+            .await
+            .unwrap();
+    }
+
+    async fn request_twin_properties(&mut self, request_id: &str) {
+        trace!(
+            "Requesting device twin properties with rid = {}",
+            request_id
+        );
+        let packet = PublishPacket::new(
+            TopicName::new(twin_get_topic(&request_id)).unwrap(),
+            QoSWithPacketIdentifier::Level0,
+            "".as_bytes(),
+        );
+        let mut buf = vec![];
+        packet.encode(&mut buf).unwrap();
+        self.write_socket
+            .lock()
+            .await
+            .write_all(&buf[..])
+            .await
+            .unwrap();
+    }
+
+    async fn respond_to_direct_method(&mut self, response: DirectMethodResponse) {
+        // TODO: Append properties and system properties to topic path
+        trace!(
+            "Responding to direct method with rid = {}",
+            response.request_id
+        );
+        let publish_packet = PublishPacket::new(
+            TopicName::new(method_response_topic(response.status, &response.request_id)).unwrap(),
+            QoSWithPacketIdentifier::Level0,
+            response.body,
+        );
+        let mut buf = Vec::new();
+        publish_packet.encode(&mut buf).unwrap();
+        self.write_socket
+            .lock()
+            .await
+            .write_all(&buf[..])
+            .await
+            .unwrap();
+    }
+
+    async fn ping(&mut self) {
+        info!("Sending PINGREQ to broker");
+
+        let pingreq_packet = PingreqPacket::new();
+
+        let mut buf = Vec::new();
+        pingreq_packet.encode(&mut buf).unwrap();
+        self.write_socket
+            .lock()
+            .await
+            .write_all(&buf)
             .await
             .unwrap();
     }
@@ -412,13 +398,12 @@ impl Transport for MqttTransport {
 impl MqttTransport {
     #[cfg(feature = "c2d-messages")]
     async fn subscribe_to_c2d_messages(&mut self, device_id: &str) {
-        self.d2c_sender
-            .send(SendType::Subscribe(vec![(
-                TopicFilter::new(device_bound_messages_topic_filter(device_id)).unwrap(),
-                QualityOfService::Level0,
-            )]))
-            .await
-            .unwrap();
+        let topic_filters = vec![(
+            TopicFilter::new(device_bound_messages_topic_filter(device_id)).unwrap(),
+            QualityOfService::Level0,
+        )];
+
+        self.subscribe_to(topic_filters).await;
     }
 
     #[cfg(feature = "twin-properties")]
@@ -433,19 +418,27 @@ impl MqttTransport {
                 QualityOfService::Level0,
             ),
         ];
-        self.d2c_sender
-            .send(SendType::Subscribe(topics))
-            .await
-            .unwrap();
+
+        self.subscribe_to(topics).await;
     }
 
     #[cfg(feature = "direct-methods")]
     async fn subscribe_to_direct_methods(&mut self) {
-        self.d2c_sender
-            .send(SendType::Subscribe(vec![(
-                TopicFilter::new(METHOD_POST_TOPIC_FILTER).unwrap(),
-                QualityOfService::Level0,
-            )]))
+        let topic_filters = vec![(
+            TopicFilter::new(METHOD_POST_TOPIC_FILTER).unwrap(),
+            QualityOfService::Level0,
+        )];
+        self.subscribe_to(topic_filters).await;
+    }
+
+    async fn subscribe_to(&mut self, topic_filters: Vec<(TopicFilter, QualityOfService)>) {
+        let subscribe_packet = SubscribePacket::new(10, topic_filters);
+        let mut buf = Vec::new();
+        subscribe_packet.encode(&mut buf).unwrap();
+        self.write_socket
+            .lock()
+            .await
+            .write_all(&buf[..])
             .await
             .unwrap();
     }
