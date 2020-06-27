@@ -1,8 +1,5 @@
 use std::collections::HashMap;
 
-use mqtt::QualityOfService;
-use mqtt::TopicFilter;
-
 /// Type of message received in cloud to device communication
 #[derive(Debug)]
 pub enum MessageType {
@@ -31,28 +28,6 @@ impl DirectMethodResponse {
             body: body.unwrap_or_default(),
         }
     }
-}
-
-/// The type of message to send for device to cloud communication
-#[derive(Debug)]
-pub enum SendType {
-    /// Send a device to cloud message
-    Message(Message),
-    /// Ping for keep alive
-    Ping,
-    /// Respond to a direct method invocation
-    RespondToDirectMethod(DirectMethodResponse),
-    /// Request current twin properties from hub
-    RequestTwinProperties(String),
-    /// Subscribe to a particular topic
-    Subscribe(Vec<(TopicFilter, QualityOfService)>),
-    /// Update the current properties to the hub
-    PublishTwinProperties {
-        ///
-        request_id: String,
-        ///
-        body: String,
-    },
 }
 
 // System properties that are user settable

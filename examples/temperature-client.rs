@@ -120,30 +120,6 @@ async fn main() {
         }
     };
 
-    // let mut rx = client.get_receiver().unwrap();
-    // let mut tx = client.sender();
-    // let receiver = async move {
-    //     while let Some(msg) = rx.recv().await {
-    //         match msg {
-    //             MessageType::C2DMessage(message) => info!("Received message {:?}", message),
-    //             MessageType::DirectMethod(direct_method) => {
-    //                 info!("Received direct method {:?}", direct_method);
-    //                 tx.send(SendType::RespondToDirectMethod(DirectMethodResponse::new(
-    //                     direct_method.request_id,
-    //                     0,
-    //                     Some("{'responseKey': 1}".into()),
-    //                 )))
-    //                 .await
-    //                 .unwrap();
-    //             }
-    //             MessageType::DesiredPropertyUpdate(property_update) => {
-    //                 let json: serde_json::Value = property_update.into();
-    //                 info!("Received property update {:?}", json);
-    //             }
-    //         }
-    //     }
-    // };
-
     let mut interval = time::interval(time::Duration::from_secs(2));
     let mut count = 0u32;
     let sensor = TemperatureSensor::default();

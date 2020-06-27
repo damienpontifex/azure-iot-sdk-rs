@@ -4,16 +4,17 @@ use mqtt::{Encodable, QualityOfService};
 use mqtt::{TopicFilter, TopicName};
 use tokio::io::{AsyncWriteExt, ReadHalf, WriteHalf};
 use tokio::net::TcpStream;
-use tokio::sync::mpsc::{channel, Receiver, Sender};
+use tokio::sync::mpsc::{channel, Receiver};
 use tokio::sync::Mutex;
 use tokio::time;
 use tokio_tls::{TlsConnector, TlsStream};
 
 use async_trait::async_trait;
 
-use crate::message::{DirectMethodInvocation, DirectMethodResponse, Message, SendType};
+use crate::message::{DirectMethodInvocation, DirectMethodResponse, Message};
 use crate::{token::TokenSource, transport::Transport, MessageType};
 use chrono::{Duration, Utc};
+// use futures::future::{AbortHandle, Abortable};
 use std::sync::Arc;
 
 // Incoming topic names
@@ -82,12 +83,12 @@ async fn tcp_connect(iot_hub: &str) -> TlsStream<TcpStream> {
     socket
 }
 
-async fn ping(interval: u16, mut sender: Sender<SendType>) {
+async fn ping(interval: u16) {
     let mut ping_interval = time::interval(time::Duration::from_secs(interval.into()));
     loop {
         ping_interval.tick().await;
 
-        sender.send(SendType::Ping).await.unwrap();
+        // sender.send(SendType::Ping).await.unwrap();
     }
 }
 
@@ -98,7 +99,16 @@ pub struct MqttTransport {
     read_socket: Arc<Mutex<ReadHalf<TlsStream<TcpStream>>>>,
     d2c_topic: TopicName,
     rx_topic_prefix: String,
+    // rx_loop_handle: Option<AbortHandle>,
 }
+
+// impl Drop for MqttTransport {
+//     fn drop(&mut self) {
+//         if let Some(recv_abort_handle) = &self.rx_loop_handle {
+//             recv_abort_handle.abort();
+//         }
+//     }
+// }
 
 #[async_trait]
 impl Transport for MqttTransport {
@@ -145,37 +155,12 @@ impl Transport for MqttTransport {
 
         let (read_socket, write_socket) = tokio::io::split(socket);
 
-        // let (mut d2c_sender, d2c_receiver) = channel::<SendType>(100);
-        // tokio::spawn(create_sender(
-        //     write_socket,
-        //     device_id.to_owned(),
-        //     d2c_receiver,
-        // ));
-
-        // tokio::spawn(ping(KEEP_ALIVE / 2, d2c_sender.clone()));
-
-        // let (handler_tx, handler_rx) = channel::<MessageHandler>(3);
-        // if cfg!(feature = "direct-methods")
-        //     || cfg!(feature = "twin-properties")
-        //     || cfg!(feature = "c2d-messages")
-        // {
-        //     tokio::spawn(receive(read_socket, device_id.to_owned(), handler_rx));
-        // }
-
-        // #[cfg(feature = "twin-properties")]
-        // {
-        //     // Send empty message so hub will respond with device twin data
-        //     d2c_sender
-        //         .send(SendType::RequestTwinProperties("0".into()))
-        //         .await
-        //         .unwrap();
-        // }
-
         Self {
             write_socket: Arc::new(Mutex::new(write_socket)),
             read_socket: Arc::new(Mutex::new(read_socket)),
             d2c_topic: TopicName::new(cloud_bound_messages_topic(&device_id)).unwrap(),
             rx_topic_prefix: device_bound_messages_topic_prefix(&device_id),
+            // rx_loop_handle: None,
         }
     }
 
@@ -274,7 +259,7 @@ impl Transport for MqttTransport {
     async fn get_receiver(&mut self) -> Receiver<MessageType> {
         let (mut handler_tx, handler_rx) = channel::<MessageType>(3);
 
-        let cloned_self = self.clone();
+        let mut cloned_self = self.clone();
         let _ = tokio::spawn(async move {
             loop {
                 let mut socket = cloned_self.read_socket.lock().await;
@@ -316,16 +301,22 @@ impl Transport for MqttTransport {
                                 }
                             }
 
-                            handler_tx
+                            if handler_tx
                                 .send(MessageType::C2DMessage(message))
                                 .await
-                                .unwrap();
+                                .is_err()
+                            {
+                                break;
+                            }
                         } else if publ.topic_name().starts_with(TWIN_PATCH_TOPIC_PREFIX) {
                             // Twin update
-                            handler_tx
+                            if handler_tx
                                 .send(MessageType::DesiredPropertyUpdate(message))
                                 .await
-                                .unwrap();
+                                .is_err()
+                            {
+                                break;
+                            }
                         } else if publ.topic_name().starts_with(METHOD_POST_TOPIC_PREFIX) {
                             // Direct method invocation
                             // Sent to topic in format $iothub/methods/POST/{method name}/?$rid={request id}
@@ -338,19 +329,27 @@ impl Transport for MqttTransport {
                             let request_id =
                                 method_components[1][REQUEST_ID_PARAM.len()..].to_string();
 
-                            handler_tx
+                            if handler_tx
                                 .send(MessageType::DirectMethod(DirectMethodInvocation {
                                     method_name: method_components[0].to_string(),
                                     message,
                                     request_id: request_id,
                                 }))
                                 .await
-                                .unwrap();
+                                .is_err()
+                            {
+                                break;
+                            }
                         }
                     }
                     _ => {}
                 }
             }
+
+            // If mpsc::Sender::send fails, it'll break the loop
+            // From the docs, the send operation can only fail if the receiving ennd of a channel is disconnected
+            // If the receiver has been dropped, stop receiving loop and send MQTT unsubscribe
+            cloned_self.unsubscribe().await;
         });
 
         self.subscribe().await;
@@ -361,6 +360,10 @@ impl Transport for MqttTransport {
             self.request_twin_properties("0").await;
         }
 
+        // let (abort_handle, abort_registration) = AbortHandle::new_pair();
+        // let _ = Abortable::new(handle, abort_registration);
+        // self.rx_loop_handle = Some(abort_handle);
+
         handler_rx
     }
 }
@@ -369,6 +372,7 @@ impl MqttTransport {
     async fn subscribe(&mut self) {
         let mut topics = Vec::new();
 
+        // TODO: can we construct this topics vector inline without if checks
         // let o_topics = vec![
         //     #[cfg(feature = "direct-method")]
         //     (
@@ -410,6 +414,49 @@ impl MqttTransport {
             let subscribe_packet = SubscribePacket::new(10, topics);
             let mut buf = Vec::new();
             subscribe_packet.encode(&mut buf).unwrap();
+            self.write_socket
+                .lock()
+                .await
+                .write_all(&buf[..])
+                .await
+                .unwrap();
+        }
+    }
+
+    async fn unsubscribe(&mut self) {
+        let mut topics = Vec::new();
+
+        // TODO: can we construct this topics vector inline without if checks
+        // let o_topics = vec![
+        //     #[cfg(feature = "direct-method")]
+        //     (
+        //         TopicFilter::new(METHOD_POST_TOPIC_FILTER).unwrap(),
+        //         QualityOfService::Level0,
+        //     ),
+        // ];
+
+        if cfg!(feature = "direct-method") {
+            topics.push(TopicFilter::new(METHOD_POST_TOPIC_FILTER).unwrap());
+        }
+
+        if cfg!(feature = "c2d-messages") {
+            topics
+                .push(TopicFilter::new(device_bound_messages_topic_filter("FirstDevice")).unwrap());
+        }
+
+        if cfg!(feature = "twin-properties") {
+            topics.extend_from_slice(&[
+                TopicFilter::new(TWIN_RESPONSE_TOPIC_FILTER).unwrap(),
+                TopicFilter::new(TWIN_PATCH_TOPIC_FILTER).unwrap(),
+            ]);
+        }
+
+        trace!("Unsubscribing to {:?}", topics);
+
+        if !topics.is_empty() {
+            let unsubscribe_packet = UnsubscribePacket::new(10, topics);
+            let mut buf = Vec::new();
+            unsubscribe_packet.encode(&mut buf).unwrap();
             self.write_socket
                 .lock()
                 .await
