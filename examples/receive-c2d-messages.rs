@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate log;
 
-use azure_iot_sdk::{DeviceKeyTokenSource, IoTHubClient, MqttTransport};
+use azure_iot_sdk::{DeviceKeyTokenSource, IoTHubClient, MessageType, MqttTransport};
 
 use serde::Deserialize;
 
@@ -38,14 +38,11 @@ async fn main() {
 
     info!("Initialized client");
 
-    client
-        .on_message(|msg| {
-            println!(
-                "Received message '{}'",
-                std::str::from_utf8(&msg.body).unwrap()
-            );
-        })
-        .await;
-
-    std::thread::park();
+    let mut recv = client.get_receiver().await;
+    while let Some(msg) = recv.recv().await {
+        match msg {
+            MessageType::C2DMessage(msg) => info!("Received message {:?}", msg),
+            _ => {}
+        }
+    }
 }

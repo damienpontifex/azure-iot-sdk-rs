@@ -2,20 +2,20 @@ use mqtt::control::variable_header::ConnectReturnCode;
 use mqtt::packet::*;
 use mqtt::{Encodable, QualityOfService};
 use mqtt::{TopicFilter, TopicName};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncWriteExt, ReadHalf, WriteHalf};
 use tokio::net::TcpStream;
-use tokio::sync::mpsc::{channel, Receiver, Sender};
+use tokio::sync::mpsc::{channel, Receiver};
+use tokio::sync::Mutex;
 use tokio::time;
 use tokio_tls::{TlsConnector, TlsStream};
 
 use async_trait::async_trait;
 
-use crate::message::{DirectMethodResponse, Message, SendType};
-use crate::{
-    token::TokenSource,
-    transport::{MessageHandler, Transport},
-};
+use crate::message::{DirectMethodInvocation, DirectMethodResponse, Message};
+use crate::{token::TokenSource, transport::Transport, MessageType};
 use chrono::{Duration, Utc};
+// use futures::future::{AbortHandle, Abortable};
+use std::sync::Arc;
 
 // Incoming topic names
 const METHOD_POST_TOPIC_FILTER: &str = "$iothub/methods/POST/#";
@@ -83,202 +83,32 @@ async fn tcp_connect(iot_hub: &str) -> TlsStream<TcpStream> {
     socket
 }
 
-/// Async loop to create task that will received from mpsc receiver and send to IoT hub
-///
-/// # Arguments
-///
-/// * `write_socket` -
-/// * `device_id` -
-/// * `receiver` -
-async fn create_sender<S>(mut write_socket: S, device_id: String, mut receiver: Receiver<SendType>)
-where
-    S: AsyncWriteExt + Unpin,
-{
-    let send_topic = TopicName::new(cloud_bound_messages_topic(&device_id)).unwrap();
-    while let Some(sent) = receiver.recv().await {
-        match sent {
-            SendType::Message(message) => {
-                // TODO: Append properties and system properties to topic path
-                trace!("Sending message {:?}", message);
-                let publish_packet = PublishPacket::new(
-                    send_topic.clone(),
-                    QoSWithPacketIdentifier::Level0,
-                    message.body,
-                );
-                let mut buf = Vec::new();
-                publish_packet.encode(&mut buf).unwrap();
-                write_socket.write_all(&buf[..]).await.unwrap();
-            }
-            SendType::Ping => {
-                info!("Sending PINGREQ to broker");
-
-                let pingreq_packet = PingreqPacket::new();
-
-                let mut buf = Vec::new();
-                pingreq_packet.encode(&mut buf).unwrap();
-                write_socket.write_all(&buf).await.unwrap();
-            }
-            SendType::RespondToDirectMethod(response) => {
-                // TODO: Append properties and system properties to topic path
-                trace!(
-                    "Responding to direct method with rid = {}",
-                    response.request_id
-                );
-                let publish_packet = PublishPacket::new(
-                    TopicName::new(method_response_topic(response.status, &response.request_id))
-                        .unwrap(),
-                    QoSWithPacketIdentifier::Level0,
-                    response.body,
-                );
-                let mut buf = Vec::new();
-                publish_packet.encode(&mut buf).unwrap();
-                write_socket.write_all(&buf[..]).await.unwrap();
-            }
-            SendType::RequestTwinProperties(request_id) => {
-                trace!(
-                    "Requesting device twin properties with rid = {}",
-                    request_id
-                );
-                let packet = PublishPacket::new(
-                    TopicName::new(twin_get_topic(&request_id)).unwrap(),
-                    QoSWithPacketIdentifier::Level0,
-                    "".as_bytes(),
-                );
-                let mut buf = vec![];
-                packet.encode(&mut buf).unwrap();
-                write_socket.write_all(&buf[..]).await.unwrap();
-            }
-            SendType::Subscribe(topic_filters) => {
-                let subscribe_packet = SubscribePacket::new(10, topic_filters);
-                let mut buf = Vec::new();
-                subscribe_packet.encode(&mut buf).unwrap();
-                write_socket.write_all(&buf[..]).await.unwrap();
-            }
-            SendType::PublishTwinProperties { request_id, body } => {
-                trace!("Publishing twin properties with rid = {}", request_id);
-                let packet = PublishPacket::new(
-                    TopicName::new(twin_update_topic(&request_id)).unwrap(),
-                    QoSWithPacketIdentifier::Level0,
-                    body.as_bytes(),
-                );
-                let mut buf = vec![];
-                packet.encode(&mut buf).unwrap();
-                write_socket.write_all(&buf[..]).await.unwrap();
-            }
-        }
-    }
-}
-
-/// Start receive async loop as task that will send received messages from the cloud onto mpsc
-///
-/// Arguments
-///
-/// * `read_socket` -
-/// * `device_id` -
-/// * `sender` -
-pub(crate) async fn receive<S>(
-    mut read_socket: S,
-    device_id: String,
-    mut sender: Sender<SendType>,
-    mut receiver: Receiver<MessageHandler>,
-) where
-    S: AsyncReadExt + Unpin,
-{
-    let rx_topic_prefix = device_bound_messages_topic_prefix(&device_id);
-    let mut message_handler: Option<Box<dyn Fn(Message) + Send>> = None;
-    let mut twin_handler: Option<Box<dyn Fn(Message) + Send>> = None;
-    let mut method_handler: Option<Box<dyn Fn(String, Message) -> i32 + Send>> = None;
-
-    loop {
-        tokio::select! {
-            Some(handler) = receiver.recv() => {
-              // Update message handlers if a message received on this channel
-              match handler {
-                MessageHandler::Message(msg_handler) => message_handler = Some(msg_handler),
-                MessageHandler::TwinUpdate(msg_handler) => twin_handler = Some(msg_handler),
-                MessageHandler::DirectMethod(msg_handler) => method_handler = Some(msg_handler),
-              }
-            }
-            Ok(packet) = VariablePacket::parse(&mut read_socket) => {
-              // Networking
-              trace!("PACKET {:?}", packet);
-              match packet {
-                // TODO: handle ping req from server and we should send ping response in return
-                VariablePacket::PingrespPacket(..) => {
-                    info!("Receiving PINGRESP from broker ..");
-                }
-                VariablePacket::PublishPacket(ref publ) => {
-                    let mut message = Message::new(publ.payload_ref()[..].to_vec());
-                    trace!("PUBLISH ({}): {:?}", publ.topic_name(), message);
-
-                    if publ.topic_name().starts_with(&rx_topic_prefix) {
-                        // C2D Message
-                        let properties = publ.topic_name().trim_start_matches(&rx_topic_prefix);
-                        let property_tuples =
-                            serde_urlencoded::from_str::<Vec<(String, String)>>(properties).unwrap();
-                        for (key, value) in property_tuples {
-                            // We have properties after the topic path
-                            if key.starts_with("$.") {
-                                message
-                                    .system_properties
-                                    .insert(key[2..].to_string(), value);
-                            } else {
-                                message.properties.insert(key, value);
-                            }
-                        }
-                        if let Some(msg_handler) = &message_handler {
-                          msg_handler(message);
-                        }
-
-                    } else if publ.topic_name().starts_with(TWIN_PATCH_TOPIC_PREFIX) {
-                      // Twin update
-                      if let Some(twin_handler) = &twin_handler {
-                        twin_handler(message);
-                      }
-
-                    } else if publ.topic_name().starts_with(METHOD_POST_TOPIC_PREFIX) {
-                        // Direct method invocation
-                        // Sent to topic in format $iothub/methods/POST/{method name}/?$rid={request id}
-
-                        // Strip the prefix from the topic left with {method name}/$rid={request id}
-                        let details = &publ.topic_name()[METHOD_POST_TOPIC_PREFIX.len()..];
-
-                        let method_components: Vec<_> = details.split('/').collect();
-
-                        // If we don't have a handler respond with -1
-                        let mut method_response = -1;
-
-                        if let Some(method_handler) = &method_handler {
-                          method_response = method_handler(method_components[0].to_string(), message);
-                        }
-
-                        let request_id = method_components[1][REQUEST_ID_PARAM.len()..].to_string();
-                        let to_respond_with = SendType::RespondToDirectMethod(DirectMethodResponse::new(request_id, method_response, None));
-                        sender.send(to_respond_with).await.unwrap();
-                    }
-                }
-                _ => {}
-              }
-            }
-        }
-    }
-}
-
-async fn ping(interval: u16, mut sender: Sender<SendType>) {
+async fn ping(interval: u16) {
     let mut ping_interval = time::interval(time::Duration::from_secs(interval.into()));
     loop {
         ping_interval.tick().await;
 
-        sender.send(SendType::Ping).await.unwrap();
+        // sender.send(SendType::Ping).await.unwrap();
     }
 }
 
 ///
 #[derive(Debug, Clone)]
 pub struct MqttTransport {
-    pub(crate) handler_tx: Sender<MessageHandler>,
-    pub(crate) d2c_sender: Sender<SendType>,
+    write_socket: Arc<Mutex<WriteHalf<TlsStream<TcpStream>>>>,
+    read_socket: Arc<Mutex<ReadHalf<TlsStream<TcpStream>>>>,
+    d2c_topic: TopicName,
+    rx_topic_prefix: String,
+    // rx_loop_handle: Option<AbortHandle>,
 }
+
+// impl Drop for MqttTransport {
+//     fn drop(&mut self) {
+//         if let Some(recv_abort_handle) = &self.rx_loop_handle {
+//             recv_abort_handle.abort();
+//         }
+//     }
+// }
 
 #[async_trait]
 impl Transport for MqttTransport {
@@ -325,128 +155,314 @@ impl Transport for MqttTransport {
 
         let (read_socket, write_socket) = tokio::io::split(socket);
 
-        let (mut d2c_sender, d2c_receiver) = channel::<SendType>(100);
-        tokio::spawn(create_sender(
-            write_socket,
-            device_id.to_owned(),
-            d2c_receiver,
-        ));
-
-        tokio::spawn(ping(KEEP_ALIVE / 2, d2c_sender.clone()));
-
-        let (handler_tx, handler_rx) = channel::<MessageHandler>(3);
-        if cfg!(feature = "direct-methods")
-            || cfg!(feature = "twin-properties")
-            || cfg!(feature = "c2d-messages")
-        {
-            let sender = d2c_sender.clone();
-            tokio::spawn(receive(
-                read_socket,
-                device_id.to_owned(),
-                sender,
-                handler_rx,
-            ));
-        }
-
-        #[cfg(feature = "twin-properties")]
-        {
-            // Send empty message so hub will respond with device twin data
-            d2c_sender
-                .send(SendType::RequestTwinProperties("0".into()))
-                .await
-                .unwrap();
-        }
-
         Self {
-            handler_tx,
-            d2c_sender,
+            write_socket: Arc::new(Mutex::new(write_socket)),
+            read_socket: Arc::new(Mutex::new(read_socket)),
+            d2c_topic: TopicName::new(cloud_bound_messages_topic(&device_id)).unwrap(),
+            rx_topic_prefix: device_bound_messages_topic_prefix(&device_id),
+            // rx_loop_handle: None,
         }
     }
 
     async fn send_message(&mut self, message: Message) {
-        self.d2c_sender
-            .send(SendType::Message(message))
+        // TODO: Append properties and system properties to topic path
+        trace!("Sending message {:?}", message);
+        let publish_packet = PublishPacket::new(
+            self.d2c_topic.clone(),
+            QoSWithPacketIdentifier::Level0,
+            message.body,
+        );
+        let mut buf = Vec::new();
+        publish_packet.encode(&mut buf).unwrap();
+
+        self.write_socket
+            .lock()
+            .await
+            .write_all(&buf[..])
             .await
             .unwrap();
     }
 
     async fn send_property_update(&mut self, request_id: &str, body: &str) {
-        self.d2c_sender
-            .send(SendType::PublishTwinProperties {
-                request_id: request_id.to_string(),
-                body: body.to_string(),
-            })
+        trace!("Publishing twin properties with rid = {}", request_id);
+        let packet = PublishPacket::new(
+            TopicName::new(twin_update_topic(&request_id)).unwrap(),
+            QoSWithPacketIdentifier::Level0,
+            body.as_bytes(),
+        );
+        let mut buf = vec![];
+        packet.encode(&mut buf).unwrap();
+        self.write_socket
+            .lock()
+            .await
+            .write_all(&buf[..])
             .await
             .unwrap();
     }
 
-    async fn set_message_handler(&mut self, device_id: &str, handler: MessageHandler) {
-        // TODO: figure out how to do self.handler_tx.send and then match on enum type after for subscription
-        // to reduce duplication here
-        match handler {
-            MessageHandler::Message(_) => {
-                if self.handler_tx.send(handler).await.is_err() {
-                    error!("Failed to set message handler");
-                    return;
+    async fn request_twin_properties(&mut self, request_id: &str) {
+        trace!(
+            "Requesting device twin properties with rid = {}",
+            request_id
+        );
+        let packet = PublishPacket::new(
+            TopicName::new(twin_get_topic(&request_id)).unwrap(),
+            QoSWithPacketIdentifier::Level0,
+            "".as_bytes(),
+        );
+        let mut buf = vec![];
+        packet.encode(&mut buf).unwrap();
+        self.write_socket
+            .lock()
+            .await
+            .write_all(&buf[..])
+            .await
+            .unwrap();
+    }
+
+    async fn respond_to_direct_method(&mut self, response: DirectMethodResponse) {
+        // TODO: Append properties and system properties to topic path
+        trace!(
+            "Responding to direct method with rid = {}",
+            response.request_id
+        );
+        let publish_packet = PublishPacket::new(
+            TopicName::new(method_response_topic(response.status, &response.request_id)).unwrap(),
+            QoSWithPacketIdentifier::Level0,
+            response.body,
+        );
+        let mut buf = Vec::new();
+        publish_packet.encode(&mut buf).unwrap();
+        self.write_socket
+            .lock()
+            .await
+            .write_all(&buf[..])
+            .await
+            .unwrap();
+    }
+
+    async fn ping(&mut self) {
+        info!("Sending PINGREQ to broker");
+
+        let pingreq_packet = PingreqPacket::new();
+
+        let mut buf = Vec::new();
+        pingreq_packet.encode(&mut buf).unwrap();
+        self.write_socket
+            .lock()
+            .await
+            .write_all(&buf)
+            .await
+            .unwrap();
+    }
+
+    async fn get_receiver(&mut self) -> Receiver<MessageType> {
+        let (mut handler_tx, handler_rx) = channel::<MessageType>(3);
+
+        let mut cloned_self = self.clone();
+        let _ = tokio::spawn(async move {
+            loop {
+                let mut socket = cloned_self.read_socket.lock().await;
+                let packet = match VariablePacket::parse(&mut *socket).await {
+                    Ok(pk) => pk,
+                    Err(err) => {
+                        error!("Error in receiving packet {}", err);
+                        continue;
+                    }
+                };
+
+                // Networking
+                trace!("Received PACKET {:?}", packet);
+                match packet {
+                    // TODO: handle ping req from server and we should send ping response in return
+                    VariablePacket::PingrespPacket(..) => {
+                        info!("Receiving PINGRESP from broker ..");
+                    }
+                    VariablePacket::PublishPacket(ref publ) => {
+                        let mut message = Message::new(publ.payload_ref()[..].to_vec());
+                        trace!("PUBLISH ({}): {:?}", publ.topic_name(), message);
+
+                        if publ.topic_name().starts_with(&cloned_self.rx_topic_prefix) {
+                            // C2D Message
+                            let properties = publ
+                                .topic_name()
+                                .trim_start_matches(&cloned_self.rx_topic_prefix);
+                            let property_tuples =
+                                serde_urlencoded::from_str::<Vec<(String, String)>>(properties)
+                                    .unwrap();
+                            for (key, value) in property_tuples {
+                                // We have properties after the topic path
+                                if key.starts_with("$.") {
+                                    message
+                                        .system_properties
+                                        .insert(key[2..].to_string(), value);
+                                } else {
+                                    message.properties.insert(key, value);
+                                }
+                            }
+
+                            if handler_tx
+                                .send(MessageType::C2DMessage(message))
+                                .await
+                                .is_err()
+                            {
+                                break;
+                            }
+                        } else if publ.topic_name().starts_with(TWIN_PATCH_TOPIC_PREFIX) {
+                            // Twin update
+                            if handler_tx
+                                .send(MessageType::DesiredPropertyUpdate(message))
+                                .await
+                                .is_err()
+                            {
+                                break;
+                            }
+                        } else if publ.topic_name().starts_with(METHOD_POST_TOPIC_PREFIX) {
+                            // Direct method invocation
+                            // Sent to topic in format $iothub/methods/POST/{method name}/?$rid={request id}
+
+                            // Strip the prefix from the topic left with {method name}/$rid={request id}
+                            let details = &publ.topic_name()[METHOD_POST_TOPIC_PREFIX.len()..];
+
+                            let method_components: Vec<_> = details.split('/').collect();
+
+                            let request_id =
+                                method_components[1][REQUEST_ID_PARAM.len()..].to_string();
+
+                            if handler_tx
+                                .send(MessageType::DirectMethod(DirectMethodInvocation {
+                                    method_name: method_components[0].to_string(),
+                                    message,
+                                    request_id: request_id,
+                                }))
+                                .await
+                                .is_err()
+                            {
+                                break;
+                            }
+                        }
+                    }
+                    _ => {}
                 }
-                self.subscribe_to_c2d_messages(device_id).await
             }
-            MessageHandler::DirectMethod(_) => {
-                if self.handler_tx.send(handler).await.is_err() {
-                    error!("Failed to set message handler");
-                    return;
-                }
-                self.subscribe_to_direct_methods().await
-            }
-            MessageHandler::TwinUpdate(_) => {
-                if self.handler_tx.send(handler).await.is_err() {
-                    error!("Failed to set message handler");
-                    return;
-                }
-                self.subscribe_to_twin_updates().await
-            }
+
+            // If mpsc::Sender::send fails, it'll break the loop
+            // From the docs, the send operation can only fail if the receiving ennd of a channel is disconnected
+            // If the receiver has been dropped, stop receiving loop and send MQTT unsubscribe
+            cloned_self.unsubscribe().await;
+        });
+
+        self.subscribe().await;
+
+        #[cfg(feature = "twin-properties")]
+        {
+            // Send empty message so hub will respond with device twin data
+            self.request_twin_properties("0").await;
         }
+
+        // let (abort_handle, abort_registration) = AbortHandle::new_pair();
+        // let _ = Abortable::new(handle, abort_registration);
+        // self.rx_loop_handle = Some(abort_handle);
+
+        handler_rx
     }
 }
 
 impl MqttTransport {
-    #[cfg(feature = "c2d-messages")]
-    async fn subscribe_to_c2d_messages(&mut self, device_id: &str) {
-        self.d2c_sender
-            .send(SendType::Subscribe(vec![(
-                TopicFilter::new(device_bound_messages_topic_filter(device_id)).unwrap(),
-                QualityOfService::Level0,
-            )]))
-            .await
-            .unwrap();
-    }
+    async fn subscribe(&mut self) {
+        let mut topics = Vec::new();
 
-    #[cfg(feature = "twin-properties")]
-    async fn subscribe_to_twin_updates(&mut self) {
-        let topics = vec![
-            (
-                TopicFilter::new(TWIN_RESPONSE_TOPIC_FILTER).unwrap(),
-                QualityOfService::Level0,
-            ),
-            (
-                TopicFilter::new(TWIN_PATCH_TOPIC_FILTER).unwrap(),
-                QualityOfService::Level0,
-            ),
-        ];
-        self.d2c_sender
-            .send(SendType::Subscribe(topics))
-            .await
-            .unwrap();
-    }
+        // TODO: can we construct this topics vector inline without if checks
+        // let o_topics = vec![
+        //     #[cfg(feature = "direct-method")]
+        //     (
+        //         TopicFilter::new(METHOD_POST_TOPIC_FILTER).unwrap(),
+        //         QualityOfService::Level0,
+        //     ),
+        // ];
 
-    #[cfg(feature = "direct-methods")]
-    async fn subscribe_to_direct_methods(&mut self) {
-        self.d2c_sender
-            .send(SendType::Subscribe(vec![(
+        if cfg!(feature = "direct-method") {
+            topics.push((
                 TopicFilter::new(METHOD_POST_TOPIC_FILTER).unwrap(),
                 QualityOfService::Level0,
-            )]))
-            .await
-            .unwrap();
+            ));
+        }
+
+        if cfg!(feature = "c2d-messages") {
+            topics.push((
+                TopicFilter::new(device_bound_messages_topic_filter("FirstDevice")).unwrap(),
+                QualityOfService::Level0,
+            ));
+        }
+
+        if cfg!(feature = "twin-properties") {
+            topics.extend_from_slice(&[
+                (
+                    TopicFilter::new(TWIN_RESPONSE_TOPIC_FILTER).unwrap(),
+                    QualityOfService::Level0,
+                ),
+                (
+                    TopicFilter::new(TWIN_PATCH_TOPIC_FILTER).unwrap(),
+                    QualityOfService::Level0,
+                ),
+            ]);
+        }
+
+        trace!("Subscribing to {:?}", topics);
+
+        if !topics.is_empty() {
+            let subscribe_packet = SubscribePacket::new(10, topics);
+            let mut buf = Vec::new();
+            subscribe_packet.encode(&mut buf).unwrap();
+            self.write_socket
+                .lock()
+                .await
+                .write_all(&buf[..])
+                .await
+                .unwrap();
+        }
+    }
+
+    async fn unsubscribe(&mut self) {
+        let mut topics = Vec::new();
+
+        // TODO: can we construct this topics vector inline without if checks
+        // let o_topics = vec![
+        //     #[cfg(feature = "direct-method")]
+        //     (
+        //         TopicFilter::new(METHOD_POST_TOPIC_FILTER).unwrap(),
+        //         QualityOfService::Level0,
+        //     ),
+        // ];
+
+        if cfg!(feature = "direct-method") {
+            topics.push(TopicFilter::new(METHOD_POST_TOPIC_FILTER).unwrap());
+        }
+
+        if cfg!(feature = "c2d-messages") {
+            topics
+                .push(TopicFilter::new(device_bound_messages_topic_filter("FirstDevice")).unwrap());
+        }
+
+        if cfg!(feature = "twin-properties") {
+            topics.extend_from_slice(&[
+                TopicFilter::new(TWIN_RESPONSE_TOPIC_FILTER).unwrap(),
+                TopicFilter::new(TWIN_PATCH_TOPIC_FILTER).unwrap(),
+            ]);
+        }
+
+        trace!("Unsubscribing to {:?}", topics);
+
+        if !topics.is_empty() {
+            let unsubscribe_packet = UnsubscribePacket::new(10, topics);
+            let mut buf = Vec::new();
+            unsubscribe_packet.encode(&mut buf).unwrap();
+            self.write_socket
+                .lock()
+                .await
+                .write_all(&buf[..])
+                .await
+                .unwrap();
+        }
     }
 }
