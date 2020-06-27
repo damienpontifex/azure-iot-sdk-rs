@@ -7,7 +7,7 @@ use tokio::net::TcpStream;
 use tokio::sync::mpsc::{channel, Receiver};
 use tokio::sync::Mutex;
 use tokio::time;
-use tokio_tls::{TlsConnector, TlsStream};
+use tokio_native_tls::{TlsConnector, TlsStream};
 
 use async_trait::async_trait;
 
