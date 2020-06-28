@@ -1,17 +1,26 @@
 use std::collections::HashMap;
 
 /// Type of message received in cloud to device communication
+#[cfg(any(
+    feature = "direct-methods",
+    feature = "c2d-messages",
+    feature = "twin-properties"
+))]
 #[derive(Debug)]
 pub enum MessageType {
     /// Cloud to device message
+    #[cfg(feature = "c2d-messages")]
     C2DMessage(Message),
     /// Cloud updating desired properties
+    #[cfg(feature = "twin-properties")]
     DesiredPropertyUpdate(Message),
     /// Cloud sending a direct method invocation
+    #[cfg(feature = "direct-methods")]
     DirectMethod(DirectMethodInvocation),
 }
 
 /// Instance to respond to a direct method invocation
+#[cfg(feature = "direct-methods")]
 #[derive(Debug)]
 pub struct DirectMethodResponse {
     pub(crate) status: i32,
@@ -19,6 +28,7 @@ pub struct DirectMethodResponse {
     pub(crate) body: String,
 }
 
+#[cfg(feature = "direct-methods")]
 impl DirectMethodResponse {
     /// Make a new direct method response
     pub fn new(request_id: String, status: i32, body: Option<String>) -> Self {
@@ -96,9 +106,13 @@ impl MessageBuilder {
 }
 
 /// Details about a cloud to device direct method invocation call
+#[cfg(feature = "direct-methods")]
 #[derive(Debug)]
 pub struct DirectMethodInvocation {
+    ///
     pub method_name: String,
+    ///
     pub message: Message,
+    ///
     pub request_id: String,
 }
