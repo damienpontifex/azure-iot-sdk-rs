@@ -1,9 +1,20 @@
 use mqtt::control::variable_header::ConnectReturnCode;
 use mqtt::packet::*;
-use mqtt::{Encodable, QualityOfService};
-use mqtt::{TopicFilter, TopicName};
+use mqtt::Encodable;
+use mqtt::TopicName;
+#[cfg(any(
+    feature = "direct-methods",
+    feature = "c2d-messages",
+    feature = "twin-properties"
+))]
+use mqtt::{QualityOfService, TopicFilter};
 use tokio::io::{AsyncWriteExt, ReadHalf, WriteHalf};
 use tokio::net::TcpStream;
+#[cfg(any(
+    feature = "direct-methods",
+    feature = "c2d-messages",
+    feature = "twin-properties"
+))]
 use tokio::sync::mpsc::{channel, Receiver};
 use tokio::sync::Mutex;
 use tokio::time;
@@ -11,37 +22,56 @@ use tokio_native_tls::{TlsConnector, TlsStream};
 
 use async_trait::async_trait;
 
-use crate::message::{DirectMethodInvocation, DirectMethodResponse, Message};
-use crate::{token::TokenSource, transport::Transport, MessageType};
+use crate::message::Message;
+#[cfg(any(
+    feature = "direct-methods",
+    feature = "c2d-messages",
+    feature = "twin-properties"
+))]
+use crate::message::MessageType;
+#[cfg(feature = "direct-methods")]
+use crate::message::{DirectMethodInvocation, DirectMethodResponse};
+use crate::{token::TokenSource, transport::Transport};
 use chrono::{Duration, Utc};
 // use futures::future::{AbortHandle, Abortable};
 use std::sync::Arc;
 
 // Incoming topic names
+#[cfg(feature = "direct-methods")]
 const METHOD_POST_TOPIC_FILTER: &str = "$iothub/methods/POST/#";
+#[cfg(feature = "direct-methods")]
 const METHOD_POST_TOPIC_PREFIX: &str = "$iothub/methods/POST/";
+#[cfg(feature = "twin-properties")]
 const TWIN_RESPONSE_TOPIC_FILTER: &str = "$iothub/twin/res/#";
 // const TWIN_RESPONSE_TOPIC_PREFIX: &str = "$iothub/twin/res/";
+#[cfg(feature = "twin-properties")]
 const TWIN_PATCH_TOPIC_FILTER: &str = "$iothub/twin/PATCH/properties/desired/#";
+#[cfg(feature = "twin-properties")]
 const TWIN_PATCH_TOPIC_PREFIX: &str = "$iothub/twin/PATCH/properties/desired/";
+#[cfg(feature = "twin-properties")]
 const TWIN_PATCH_UPDATE_PREFIX: &str = "$iothub/twin/PATCH/properties/reported/";
 
 // Outgoing topic names
+#[cfg(feature = "direct-methods")]
 fn method_response_topic(status: i32, request_id: &str) -> String {
     format!("$iothub/methods/res/{}/?$rid={}", status, request_id)
 }
 
+#[cfg(feature = "twin-properties")]
 fn twin_get_topic(request_id: &str) -> String {
     format!("$iothub/twin/GET/?$rid={}", request_id)
 }
 
+#[cfg(feature = "twin-properties")]
 fn twin_update_topic(request_id: &str) -> String {
     format!("{}?$rid={}", TWIN_PATCH_UPDATE_PREFIX, request_id)
 }
 
+#[cfg(feature = "c2d-messages")]
 fn device_bound_messages_topic_filter(device_id: &str) -> String {
     format!("devices/{}/messages/devicebound/#", device_id)
 }
+#[cfg(feature = "c2d-messages")]
 fn device_bound_messages_topic_prefix(device_id: &str) -> String {
     format!("devices/{}/messages/devicebound/", device_id)
 }
@@ -50,6 +80,7 @@ fn cloud_bound_messages_topic(device_id: &str) -> String {
 }
 
 const KEEP_ALIVE: u16 = 10;
+#[cfg(feature = "direct-methods")]
 const REQUEST_ID_PARAM: &str = "?$rid=";
 
 /// Connect to Azure IoT Hub
@@ -98,6 +129,7 @@ pub struct MqttTransport {
     write_socket: Arc<Mutex<WriteHalf<TlsStream<TcpStream>>>>,
     read_socket: Arc<Mutex<ReadHalf<TlsStream<TcpStream>>>>,
     d2c_topic: TopicName,
+    #[cfg(feature = "c2d-messages")]
     rx_topic_prefix: String,
     // rx_loop_handle: Option<AbortHandle>,
 }
@@ -112,7 +144,7 @@ pub struct MqttTransport {
 
 #[async_trait]
 impl Transport for MqttTransport {
-    async fn new<TS>(hub_name: &str, device_id: &str, token_source: TS) -> Self
+    async fn new<TS>(hub_name: &str, device_id: &str, token_source: TS) -> MqttTransport
     where
         TS: TokenSource + Sync + Send,
     {
@@ -159,6 +191,7 @@ impl Transport for MqttTransport {
             write_socket: Arc::new(Mutex::new(write_socket)),
             read_socket: Arc::new(Mutex::new(read_socket)),
             d2c_topic: TopicName::new(cloud_bound_messages_topic(&device_id)).unwrap(),
+            #[cfg(feature = "c2d-messages")]
             rx_topic_prefix: device_bound_messages_topic_prefix(&device_id),
             // rx_loop_handle: None,
         }
@@ -183,6 +216,7 @@ impl Transport for MqttTransport {
             .unwrap();
     }
 
+    #[cfg(feature = "twin-properties")]
     async fn send_property_update(&mut self, request_id: &str, body: &str) {
         trace!("Publishing twin properties with rid = {}", request_id);
         let packet = PublishPacket::new(
@@ -200,6 +234,7 @@ impl Transport for MqttTransport {
             .unwrap();
     }
 
+    #[cfg(feature = "twin-properties")]
     async fn request_twin_properties(&mut self, request_id: &str) {
         trace!(
             "Requesting device twin properties with rid = {}",
@@ -220,6 +255,7 @@ impl Transport for MqttTransport {
             .unwrap();
     }
 
+    #[cfg(feature = "direct-methods")]
     async fn respond_to_direct_method(&mut self, response: DirectMethodResponse) {
         // TODO: Append properties and system properties to topic path
         trace!(
@@ -256,6 +292,11 @@ impl Transport for MqttTransport {
             .unwrap();
     }
 
+    #[cfg(any(
+        feature = "direct-methods",
+        feature = "c2d-messages",
+        feature = "twin-properties"
+    ))]
     async fn get_receiver(&mut self) -> Receiver<MessageType> {
         let (mut handler_tx, handler_rx) = channel::<MessageType>(3);
 
@@ -282,6 +323,7 @@ impl Transport for MqttTransport {
                         let mut message = Message::new(publ.payload_ref()[..].to_vec());
                         trace!("PUBLISH ({}): {:?}", publ.topic_name(), message);
 
+                        #[cfg(feature = "c2d-messages")]
                         if publ.topic_name().starts_with(&cloned_self.rx_topic_prefix) {
                             // C2D Message
                             let properties = publ
@@ -308,7 +350,12 @@ impl Transport for MqttTransport {
                             {
                                 break;
                             }
-                        } else if publ.topic_name().starts_with(TWIN_PATCH_TOPIC_PREFIX) {
+
+                            return;
+                        }
+
+                        #[cfg(feature = "twin-properties")]
+                        if publ.topic_name().starts_with(TWIN_PATCH_TOPIC_PREFIX) {
                             // Twin update
                             if handler_tx
                                 .send(MessageType::DesiredPropertyUpdate(message))
@@ -317,7 +364,12 @@ impl Transport for MqttTransport {
                             {
                                 break;
                             }
-                        } else if publ.topic_name().starts_with(METHOD_POST_TOPIC_PREFIX) {
+
+                            return;
+                        }
+
+                        #[cfg(feature = "direct-methods")]
+                        if publ.topic_name().starts_with(METHOD_POST_TOPIC_PREFIX) {
                             // Direct method invocation
                             // Sent to topic in format $iothub/methods/POST/{method name}/?$rid={request id}
 
@@ -340,6 +392,8 @@ impl Transport for MqttTransport {
                             {
                                 break;
                             }
+
+                            return;
                         }
                     }
                     _ => {}
@@ -354,11 +408,9 @@ impl Transport for MqttTransport {
 
         self.subscribe().await;
 
+        // Send empty message so hub will respond with device twin data
         #[cfg(feature = "twin-properties")]
-        {
-            // Send empty message so hub will respond with device twin data
-            self.request_twin_properties("0").await;
-        }
+        self.request_twin_properties("0").await;
 
         // let (abort_handle, abort_registration) = AbortHandle::new_pair();
         // let _ = Abortable::new(handle, abort_registration);
@@ -368,101 +420,71 @@ impl Transport for MqttTransport {
     }
 }
 
+#[cfg(any(
+    feature = "direct-methods",
+    feature = "c2d-messages",
+    feature = "twin-properties"
+))]
 impl MqttTransport {
     async fn subscribe(&mut self) {
-        let mut topics = Vec::new();
-
-        // TODO: can we construct this topics vector inline without if checks
-        // let o_topics = vec![
-        //     #[cfg(feature = "direct-method")]
-        //     (
-        //         TopicFilter::new(METHOD_POST_TOPIC_FILTER).unwrap(),
-        //         QualityOfService::Level0,
-        //     ),
-        // ];
-
-        if cfg!(feature = "direct-method") {
-            topics.push((
+        let topics = vec![
+            #[cfg(feature = "direct-methods")]
+            (
                 TopicFilter::new(METHOD_POST_TOPIC_FILTER).unwrap(),
                 QualityOfService::Level0,
-            ));
-        }
-
-        if cfg!(feature = "c2d-messages") {
-            topics.push((
+            ),
+            #[cfg(feature = "c2d-messages")]
+            (
                 TopicFilter::new(device_bound_messages_topic_filter("FirstDevice")).unwrap(),
                 QualityOfService::Level0,
-            ));
-        }
-
-        if cfg!(feature = "twin-properties") {
-            topics.extend_from_slice(&[
-                (
-                    TopicFilter::new(TWIN_RESPONSE_TOPIC_FILTER).unwrap(),
-                    QualityOfService::Level0,
-                ),
-                (
-                    TopicFilter::new(TWIN_PATCH_TOPIC_FILTER).unwrap(),
-                    QualityOfService::Level0,
-                ),
-            ]);
-        }
+            ),
+            #[cfg(feature = "twin-properties")]
+            (
+                TopicFilter::new(TWIN_RESPONSE_TOPIC_FILTER).unwrap(),
+                QualityOfService::Level0,
+            ),
+            #[cfg(feature = "twin-properties")]
+            (
+                TopicFilter::new(TWIN_PATCH_TOPIC_FILTER).unwrap(),
+                QualityOfService::Level0,
+            ),
+        ];
 
         trace!("Subscribing to {:?}", topics);
 
-        if !topics.is_empty() {
-            let subscribe_packet = SubscribePacket::new(10, topics);
-            let mut buf = Vec::new();
-            subscribe_packet.encode(&mut buf).unwrap();
-            self.write_socket
-                .lock()
-                .await
-                .write_all(&buf[..])
-                .await
-                .unwrap();
-        }
+        let subscribe_packet = SubscribePacket::new(10, topics);
+        let mut buf = Vec::new();
+        subscribe_packet.encode(&mut buf).unwrap();
+        self.write_socket
+            .lock()
+            .await
+            .write_all(&buf[..])
+            .await
+            .unwrap();
     }
 
     async fn unsubscribe(&mut self) {
-        let mut topics = Vec::new();
-
-        // TODO: can we construct this topics vector inline without if checks
-        // let o_topics = vec![
-        //     #[cfg(feature = "direct-method")]
-        //     (
-        //         TopicFilter::new(METHOD_POST_TOPIC_FILTER).unwrap(),
-        //         QualityOfService::Level0,
-        //     ),
-        // ];
-
-        if cfg!(feature = "direct-method") {
-            topics.push(TopicFilter::new(METHOD_POST_TOPIC_FILTER).unwrap());
-        }
-
-        if cfg!(feature = "c2d-messages") {
-            topics
-                .push(TopicFilter::new(device_bound_messages_topic_filter("FirstDevice")).unwrap());
-        }
-
-        if cfg!(feature = "twin-properties") {
-            topics.extend_from_slice(&[
-                TopicFilter::new(TWIN_RESPONSE_TOPIC_FILTER).unwrap(),
-                TopicFilter::new(TWIN_PATCH_TOPIC_FILTER).unwrap(),
-            ]);
-        }
+        let topics = vec![
+            #[cfg(feature = "direct-methods")]
+            TopicFilter::new(METHOD_POST_TOPIC_FILTER).unwrap(),
+            #[cfg(feature = "c2d-messages")]
+            TopicFilter::new(device_bound_messages_topic_filter("FirstDevice")).unwrap(),
+            #[cfg(feature = "twin-properties")]
+            TopicFilter::new(TWIN_RESPONSE_TOPIC_FILTER).unwrap(),
+            #[cfg(feature = "twin-properties")]
+            TopicFilter::new(TWIN_PATCH_TOPIC_FILTER).unwrap(),
+        ];
 
         trace!("Unsubscribing to {:?}", topics);
 
-        if !topics.is_empty() {
-            let unsubscribe_packet = UnsubscribePacket::new(10, topics);
-            let mut buf = Vec::new();
-            unsubscribe_packet.encode(&mut buf).unwrap();
-            self.write_socket
-                .lock()
-                .await
-                .write_all(&buf[..])
-                .await
-                .unwrap();
-        }
+        let unsubscribe_packet = UnsubscribePacket::new(10, topics);
+        let mut buf = Vec::new();
+        unsubscribe_packet.encode(&mut buf).unwrap();
+        self.write_socket
+            .lock()
+            .await
+            .write_all(&buf[..])
+            .await
+            .unwrap();
     }
 }

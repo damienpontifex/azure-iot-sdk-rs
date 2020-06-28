@@ -46,3 +46,12 @@ dotenv = "0.15"
 serde_json = "1.0"
 chrono = { version = "0.4.11", features = ["serde"] }
 
+[[example]]
+name = "send-message"
+default-features = false
+
+[[example]]
+name = "receive-c2d-messages"
+default-features = false
+required-features = ["c2d-messages"]
+

@@ -1,5 +1,18 @@
 use crate::message::Message;
-use crate::{token::TokenSource, transport::Transport, DirectMethodResponse, MessageType};
+#[cfg(feature = "direct-methods")]
+use crate::DirectMethodResponse;
+#[cfg(any(
+    feature = "direct-methods",
+    feature = "c2d-messages",
+    feature = "twin-properties"
+))]
+use crate::MessageType;
+use crate::{token::TokenSource, transport::Transport};
+#[cfg(any(
+    feature = "direct-methods",
+    feature = "c2d-messages",
+    feature = "twin-properties"
+))]
 use tokio::sync::mpsc::Receiver;
 
 /// Client for communicating with IoT hub
@@ -135,16 +148,23 @@ where
     ///    client.send_property_update(&format!("{}", update_counter), &body).await;
     ///    update_counter += 1;
     /// ```
+    #[cfg(feature = "twin-properties")]
     pub async fn send_property_update(&mut self, request_id: &str, body: &str) {
         self.transport.send_property_update(request_id, body).await;
     }
 
     ///
+    #[cfg(any(
+        feature = "direct-methods",
+        feature = "c2d-messages",
+        feature = "twin-properties"
+    ))]
     pub async fn get_receiver(&mut self) -> Receiver<MessageType> {
         self.transport.get_receiver().await
     }
 
     ///
+    #[cfg(feature = "direct-methods")]
     pub async fn respond_to_direct_method(&mut self, response: DirectMethodResponse) {
         self.transport.respond_to_direct_method(response).await
     }
