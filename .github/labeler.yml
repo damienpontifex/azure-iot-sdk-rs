@@ -1,0 +1,11 @@
+workflows:
+- .github/**/*
+
+examples:
+- examples/**/*
+
+client:
+- src/**/*
+
+dependencies:
+- all: ['Cargo.toml', 'Cargo.lock']
