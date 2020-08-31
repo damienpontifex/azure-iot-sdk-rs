@@ -89,6 +89,22 @@ impl MessageBuilder {
         self
     }
 
+    /// Set the contentType for this message, such as `text/plain`.
+    /// To allow routing query on the message body, this value should be set to `application/json`
+    pub fn set_content_type(mut self, content_type: String) -> Self {
+        self.system_properties
+            .insert("contentType".to_owned(), content_type);
+        self
+    }
+
+    /// Set the contentEncoding for this message.
+    /// If the contentType is set to `application/json`, allowed values are `UTF-8`, `UTF-16`, `UTF-32`.
+    pub fn set_content_encoding(mut self, content_encoding: String) -> Self {
+        self.system_properties
+            .insert("contentEncoding".to_owned(), content_encoding);
+        self
+    }
+
     /// Add a message property
     pub fn add_message_property(mut self, key: String, value: String) -> Self {
         self.properties.insert(key, value);
@@ -115,4 +131,32 @@ pub struct DirectMethodInvocation {
     pub message: Message,
     ///
     pub request_id: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_setting_content_type() {
+        let builder = Message::builder();
+        let msg = builder
+            .set_content_type("application/json".to_owned())
+            .set_body(vec![])
+            .build();
+
+        assert_eq!(msg.system_properties["contentType"], "application/json");
+    }
+
+    #[test]
+    fn test_setting_content_encoding() {
+        let builder = Message::builder();
+        let msg = builder
+            .set_content_type("application/json".to_owned())
+            .set_content_encoding("UTF-8".to_owned())
+            .set_body(vec![])
+            .build();
+
+        assert_eq!(msg.system_properties["contentEncoding"], "UTF-8");
+    }
 }
