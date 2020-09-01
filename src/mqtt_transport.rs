@@ -489,6 +489,11 @@ impl MqttTransport {
 }
 
 fn system_name_to_wire_name(system_name: &str) -> &str {
+    /*
+     * This is currently the bare minimum to support routing, plus the message id.
+     * The full list of "wire ids" is availabe here:
+     * https://github.com/Azure/azure-iot-sdk-csharp/blob/67f8c75576edfcbc20e23a01afc88be47552e58c/iothub/device/src/Transport/Mqtt/MqttIotHubAdapter.cs#L1068-L1086
+     */
     use crate::message;
     match system_name {
         message::CONTENT_TYPE => "$.ct",
