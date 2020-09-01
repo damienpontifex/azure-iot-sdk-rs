@@ -1,5 +1,6 @@
 use mqtt::control::variable_header::ConnectReturnCode;
 use mqtt::packet::*;
+use mqtt::topic_name::TopicNameError;
 use mqtt::Encodable;
 use mqtt::TopicName;
 #[cfg(any(
@@ -199,12 +200,10 @@ impl Transport for MqttTransport {
 
     async fn send_message(&mut self, message: Message) {
         // TODO: Append properties and system properties to topic path
-        trace!("Sending message {:?}", message);
-        let publish_packet = PublishPacket::new(
-            self.d2c_topic.clone(),
-            QoSWithPacketIdentifier::Level0,
-            message.body,
-        );
+        let full_topic = build_topic_name(&self.d2c_topic, &message).unwrap();
+        trace!("Sending message {:?} to topic {:?}", message, full_topic);
+        let publish_packet =
+            PublishPacket::new(full_topic, QoSWithPacketIdentifier::Level0, message.body);
         let mut buf = Vec::new();
         publish_packet.encode(&mut buf).unwrap();
 
@@ -487,4 +486,120 @@ impl MqttTransport {
             .await
             .unwrap();
     }
+}
+
+fn system_name_to_wire_name(system_name: &str) -> &str {
+    match system_name {
+        "contentType" => "$.ct",
+        "contentEncoding" => "$.ce",
+        crate::message::MESSAGE_ID => "$.mid",
+        _ => panic!("Invalid system property name"),
+    }
+}
+
+fn url_encode(value: &str) -> String {
+    use percent_encoding::{AsciiSet, NON_ALPHANUMERIC};
+    const ENCODE_SET: &AsciiSet = &NON_ALPHANUMERIC.remove(b'-');
+    percent_encoding::utf8_percent_encode(value, ENCODE_SET).to_string()
+}
+
+fn build_topic_name(
+    base_topic: &TopicName,
+    message: &Message,
+) -> Result<TopicName, TopicNameError> {
+    let mut raw_name = base_topic.to_string();
+    let mut is_first = true;
+    // sort the props with a stable sort so output is deterministic for tests
+    let mut props: Vec<_> = message.system_properties.iter().collect();
+    props.sort();
+    for (key, val) in props.iter() {
+        if !is_first {
+            raw_name.push('&');
+        }
+        raw_name.push_str(&format!(
+            "{}={}",
+            system_name_to_wire_name(key),
+            url_encode(val)
+        ));
+        is_first = false;
+    }
+    TopicName::new(raw_name)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Message;
+
+    #[test]
+    fn content_type_is_appended_to_topic_name() {
+        let message = Message::builder()
+            .set_body(vec![])
+            .set_content_type("application/json".to_owned())
+            .build();
+
+        let base_topic = TopicName::new("topic/").unwrap();
+
+        let topic_with_properties = build_topic_name(&base_topic, &message).unwrap().to_string();
+
+        assert_eq!("topic/$.ct=application%2Fjson", topic_with_properties);
+    }
+
+    #[test]
+    fn content_encoding_is_appended_to_topic_name() {
+        let message = Message::builder()
+            .set_body(vec![])
+            .set_content_encoding("utf-8".to_owned())
+            .build();
+
+        let base_topic = TopicName::new("topic/").unwrap();
+
+        let topic_with_properties = build_topic_name(&base_topic, &message).unwrap().to_string();
+
+        assert_eq!("topic/$.ce=utf-8", topic_with_properties);
+    }
+
+    #[test]
+    fn message_id_is_appended_to_topic_name() {
+        let message = Message::builder()
+            .set_body(vec![])
+            .set_message_id("id".to_owned())
+            .build();
+
+        let base_topic = TopicName::new("topic/").unwrap();
+
+        let topic_with_properties = build_topic_name(&base_topic, &message).unwrap().to_string();
+
+        assert_eq!("topic/$.mid=id", topic_with_properties);
+    }
+
+    #[test]
+    fn multiple_system_properties() {
+        let message = Message::builder()
+            .set_body(vec![])
+            .set_content_type("application/json".to_owned())
+            .set_content_encoding("utf-8".to_owned())
+            .build();
+
+        let base_topic = TopicName::new("topic/").unwrap();
+
+        let topic_with_properties = build_topic_name(&base_topic, &message).unwrap().to_string();
+
+        assert_eq!(
+            "topic/$.ce=utf-8&$.ct=application%2Fjson",
+            topic_with_properties
+        );
+    }
+
+    #[test]
+    fn no_system_properties() {
+        let message = Message::new(vec![]);
+        let base_topic = TopicName::new("topic/").unwrap();
+        let actual = build_topic_name(&base_topic, &message).unwrap();
+        assert_eq!(base_topic, actual);
+    }
+
+    #[test]
+    #[ignore]
+    fn app_properties_are_appended_to_topic_name() {}
 }

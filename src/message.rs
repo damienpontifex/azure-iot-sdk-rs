@@ -42,7 +42,7 @@ impl DirectMethodResponse {
 
 // System properties that are user settable
 // https://docs.microsoft.com/bs-cyrl-ba/azure/iot-hub/iot-hub-devguide-messages-construct#system-properties-of-d2c-iot-hub-messages
-const MESSAGE_ID: &str = "message-id";
+pub(crate) const MESSAGE_ID: &str = "message-id";
 
 /// Message used in body of communication
 #[derive(Default, Debug)]

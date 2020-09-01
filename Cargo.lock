@@ -63,6 +63,7 @@ dependencies = [
  "log",
  "mqtt-protocol",
  "native-tls",
+ "percent-encoding",
  "rand",
  "rand_distr",
  "serde 1.0.106",
