@@ -521,7 +521,6 @@ fn build_topic_name(
     for (key, val) in message.system_properties.iter() {
         props.insert(system_name_to_wire_name(key), val);
     }
-    // intentionally overwrite any duplicate keys, same behavior as official MS lib
     for (key, val) in message.properties.iter() {
         props.insert(key, val);
     }
