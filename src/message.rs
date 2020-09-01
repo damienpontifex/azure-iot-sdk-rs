@@ -43,6 +43,8 @@ impl DirectMethodResponse {
 // System properties that are user settable
 // https://docs.microsoft.com/bs-cyrl-ba/azure/iot-hub/iot-hub-devguide-messages-construct#system-properties-of-d2c-iot-hub-messages
 pub(crate) const MESSAGE_ID: &str = "message-id";
+pub(crate) const CONTENT_TYPE: &str = "content-type";
+pub(crate) const CONTENT_ENCODING: &str = "content-encoding";
 
 /// Message used in body of communication
 #[derive(Default, Debug)]
@@ -83,25 +85,25 @@ impl MessageBuilder {
     }
 
     /// Set the identifier for this message
-    pub fn set_message_id(mut self, message_id: String) -> Self {
-        self.system_properties
-            .insert(MESSAGE_ID.to_owned(), message_id);
-        self
+    pub fn set_message_id(self, message_id: String) -> Self {
+        self.set_system_property(MESSAGE_ID, message_id)
     }
 
-    /// Set the contentType for this message, such as `text/plain`.
+    /// Set the content-type for this message, such as `text/plain`.
     /// To allow routing query on the message body, this value should be set to `application/json`
-    pub fn set_content_type(mut self, content_type: String) -> Self {
-        self.system_properties
-            .insert("contentType".to_owned(), content_type);
-        self
+    pub fn set_content_type(self, content_type: String) -> Self {
+        self.set_system_property(CONTENT_TYPE, content_type)
     }
 
-    /// Set the contentEncoding for this message.
-    /// If the contentType is set to `application/json`, allowed values are `UTF-8`, `UTF-16`, `UTF-32`.
-    pub fn set_content_encoding(mut self, content_encoding: String) -> Self {
+    /// Set the content-encoding for this message.
+    /// If the content-type is set to `application/json`, allowed values are `UTF-8`, `UTF-16`, `UTF-32`.
+    pub fn set_content_encoding(self, content_encoding: String) -> Self {
+        self.set_system_property(CONTENT_ENCODING, content_encoding)
+    }
+
+    fn set_system_property(mut self, property_name: &str, value: String) -> Self {
         self.system_properties
-            .insert("contentEncoding".to_owned(), content_encoding);
+            .insert(property_name.to_owned(), value);
         self
     }
 
@@ -145,7 +147,7 @@ mod tests {
             .set_body(vec![])
             .build();
 
-        assert_eq!(msg.system_properties["contentType"], "application/json");
+        assert_eq!(msg.system_properties[CONTENT_TYPE], "application/json");
     }
 
     #[test]
@@ -157,6 +159,6 @@ mod tests {
             .set_body(vec![])
             .build();
 
-        assert_eq!(msg.system_properties["contentEncoding"], "UTF-8");
+        assert_eq!(msg.system_properties[CONTENT_ENCODING], "UTF-8");
     }
 }

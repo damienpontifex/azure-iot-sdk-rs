@@ -489,10 +489,11 @@ impl MqttTransport {
 }
 
 fn system_name_to_wire_name(system_name: &str) -> &str {
+    use crate::message;
     match system_name {
-        "contentType" => "$.ct",
-        "contentEncoding" => "$.ce",
-        crate::message::MESSAGE_ID => "$.mid",
+        message::CONTENT_TYPE => "$.ct",
+        message::CONTENT_ENCODING => "$.ce",
+        message::MESSAGE_ID => "$.mid",
         _ => panic!("Invalid system property name"),
     }
 }
@@ -509,18 +510,22 @@ fn build_topic_name(
 ) -> Result<TopicName, TopicNameError> {
     let mut raw_name = base_topic.to_string();
     let mut is_first = true;
-    // sort the props with a stable sort so output is deterministic for tests
-    let mut props: Vec<_> = message.system_properties.iter().collect();
-    props.sort();
+
+    //BTree for deterministic ordering
+    let mut props = std::collections::BTreeMap::new();
+    for (key, val) in message.system_properties.iter() {
+        props.insert(system_name_to_wire_name(key), val);
+    }
+    // intentionally overwrite any duplicate keys, same behavior as official MS lib
+    for (key, val) in message.properties.iter() {
+        props.insert(key, val);
+    }
+
     for (key, val) in props.iter() {
         if !is_first {
             raw_name.push('&');
         }
-        raw_name.push_str(&format!(
-            "{}={}",
-            system_name_to_wire_name(key),
-            url_encode(val)
-        ));
+        raw_name.push_str(&format!("{}={}", key, url_encode(val)));
         is_first = false;
     }
     TopicName::new(raw_name)
@@ -577,8 +582,8 @@ mod tests {
     fn multiple_system_properties() {
         let message = Message::builder()
             .set_body(vec![])
-            .set_content_type("application/json".to_owned())
             .set_content_encoding("utf-8".to_owned())
+            .set_content_type("application/json".to_owned())
             .build();
 
         let base_topic = TopicName::new("topic/").unwrap();
@@ -600,6 +605,16 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
-    fn app_properties_are_appended_to_topic_name() {}
+    fn app_properties_are_appended_to_topic_name() {
+        let message = Message::builder()
+            .set_body(vec![])
+            .add_message_property("foo".to_owned(), "bar".to_owned())
+            .build();
+
+        let base_topic = TopicName::new("topic/").unwrap();
+
+        let topic_with_properties = build_topic_name(&base_topic, &message).unwrap().to_string();
+
+        assert_eq!("topic/foo=bar", topic_with_properties);
+    }
 }
