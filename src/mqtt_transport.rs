@@ -513,9 +513,6 @@ fn build_topic_name(
     base_topic: &TopicName,
     message: &Message,
 ) -> Result<TopicName, TopicNameError> {
-    let mut raw_name = base_topic.to_string();
-    let mut is_first = true;
-
     //BTree for deterministic ordering
     let mut props = std::collections::BTreeMap::new();
     for (key, val) in message.system_properties.iter() {
@@ -525,6 +522,8 @@ fn build_topic_name(
         props.insert(key, val);
     }
 
+    let mut raw_name = base_topic.to_string();
+    let mut is_first = true;
     for (key, val) in props.iter() {
         if !is_first {
             raw_name.push('&');
