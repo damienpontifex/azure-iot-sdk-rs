@@ -491,14 +491,10 @@ fn build_topic_name(
     base_topic: &TopicName,
     message: &Message,
 ) -> Result<TopicName, TopicNameError> {
-    //BTree for deterministic ordering
-    let mut props = std::collections::BTreeMap::new();
-    for (key, val) in message.system_properties.iter() {
-        props.insert(key, val);
-    }
-    for (key, val) in message.properties.iter() {
-        props.insert(key, val);
-    }
+    let capacity = message.system_properties.len() + message.properties.len();
+    let mut props = std::collections::HashMap::with_capacity(capacity);
+    props.extend(message.system_properties.iter());
+    props.extend(message.properties.iter());
 
     // if we reuse the base_topic string as the target for the serializer,
     // we end up with an extra ampersand before the key/value pairs
@@ -553,24 +549,6 @@ mod tests {
         let topic_with_properties = build_topic_name(&base_topic, &message).unwrap().to_string();
 
         assert_eq!("topic/%24.mid=id", topic_with_properties);
-    }
-
-    #[test]
-    fn multiple_system_properties() {
-        let message = Message::builder()
-            .set_body(vec![])
-            .set_content_encoding("utf-8".to_owned())
-            .set_content_type("application/json".to_owned())
-            .build();
-
-        let base_topic = TopicName::new("topic/").unwrap();
-
-        let topic_with_properties = build_topic_name(&base_topic, &message).unwrap().to_string();
-
-        assert_eq!(
-            "topic/%24.ce=utf-8&%24.ct=application%2Fjson",
-            topic_with_properties
-        );
     }
 
     #[test]
