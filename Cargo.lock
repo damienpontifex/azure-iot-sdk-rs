@@ -56,6 +56,7 @@ dependencies = [
  "config",
  "dotenv",
  "env_logger",
+ "form_urlencoded",
  "futures",
  "hmac",
  "hyper",
@@ -63,7 +64,6 @@ dependencies = [
  "log",
  "mqtt-protocol",
  "native-tls",
- "percent-encoding",
  "rand",
  "rand_distr",
  "serde 1.0.106",
@@ -251,6 +251,16 @@ name = "foreign-types-shared"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "00b0228411908ca8685dba7fc2cdd70ec9990a6e753e89b6ac91a84c40fbaf4b"
+
+[[package]]
+name = "form_urlencoded"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ece68d15c92e84fa4f19d3780f1294e5ca82a78a6d515f1efaabcc144688be00"
+dependencies = [
+ "matches",
+ "percent-encoding",
+]
 
 [[package]]
 name = "fuchsia-zircon"

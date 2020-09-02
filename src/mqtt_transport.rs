@@ -487,12 +487,6 @@ impl MqttTransport {
     }
 }
 
-fn url_encode(value: &str) -> String {
-    use percent_encoding::{AsciiSet, NON_ALPHANUMERIC};
-    const ENCODE_SET: &AsciiSet = &NON_ALPHANUMERIC.remove(b'-');
-    percent_encoding::utf8_percent_encode(value, ENCODE_SET).to_string()
-}
-
 fn build_topic_name(
     base_topic: &TopicName,
     message: &Message,
@@ -506,16 +500,12 @@ fn build_topic_name(
         props.insert(key, val);
     }
 
-    let mut raw_name = base_topic.to_string();
-    let mut is_first = true;
-    for (key, val) in props.iter() {
-        if !is_first {
-            raw_name.push('&');
-        }
-        raw_name.push_str(&format!("{}={}", key, url_encode(val)));
-        is_first = false;
-    }
-    TopicName::new(raw_name)
+    // if we reuse the base_topic string as the target for the serializer,
+    // we end up with an extra ampersand before the key/value pairs
+    let encoded = form_urlencoded::Serializer::new(String::new())
+        .extend_pairs(props.iter())
+        .finish();
+    TopicName::new(format!("{}{}", base_topic.to_string(), encoded))
 }
 
 #[cfg(test)]
@@ -534,7 +524,7 @@ mod tests {
 
         let topic_with_properties = build_topic_name(&base_topic, &message).unwrap().to_string();
 
-        assert_eq!("topic/$.ct=application%2Fjson", topic_with_properties);
+        assert_eq!("topic/%24.ct=application%2Fjson", topic_with_properties);
     }
 
     #[test]
@@ -548,7 +538,7 @@ mod tests {
 
         let topic_with_properties = build_topic_name(&base_topic, &message).unwrap().to_string();
 
-        assert_eq!("topic/$.ce=utf-8", topic_with_properties);
+        assert_eq!("topic/%24.ce=utf-8", topic_with_properties);
     }
 
     #[test]
@@ -562,7 +552,7 @@ mod tests {
 
         let topic_with_properties = build_topic_name(&base_topic, &message).unwrap().to_string();
 
-        assert_eq!("topic/$.mid=id", topic_with_properties);
+        assert_eq!("topic/%24.mid=id", topic_with_properties);
     }
 
     #[test]
@@ -578,7 +568,7 @@ mod tests {
         let topic_with_properties = build_topic_name(&base_topic, &message).unwrap().to_string();
 
         assert_eq!(
-            "topic/$.ce=utf-8&$.ct=application%2Fjson",
+            "topic/%24.ce=utf-8&%24.ct=application%2Fjson",
             topic_with_properties
         );
     }
