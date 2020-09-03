@@ -1,5 +1,6 @@
 use mqtt::control::variable_header::ConnectReturnCode;
 use mqtt::packet::*;
+use mqtt::topic_name::TopicNameError;
 use mqtt::Encodable;
 use mqtt::TopicName;
 #[cfg(any(
@@ -198,13 +199,10 @@ impl Transport for MqttTransport {
     }
 
     async fn send_message(&mut self, message: Message) {
-        // TODO: Append properties and system properties to topic path
-        trace!("Sending message {:?}", message);
-        let publish_packet = PublishPacket::new(
-            self.d2c_topic.clone(),
-            QoSWithPacketIdentifier::Level0,
-            message.body,
-        );
+        let full_topic = build_topic_name(&self.d2c_topic, &message).unwrap();
+        trace!("Sending message {:?} to topic {:?}", message, full_topic);
+        let publish_packet =
+            PublishPacket::new(full_topic, QoSWithPacketIdentifier::Level0, message.body);
         let mut buf = Vec::new();
         publish_packet.encode(&mut buf).unwrap();
 
@@ -486,5 +484,92 @@ impl MqttTransport {
             .write_all(&buf[..])
             .await
             .unwrap();
+    }
+}
+
+fn build_topic_name(
+    base_topic: &TopicName,
+    message: &Message,
+) -> Result<TopicName, TopicNameError> {
+    let capacity = message.system_properties.len() + message.properties.len();
+    let mut props = std::collections::HashMap::with_capacity(capacity);
+    props.extend(message.system_properties.iter());
+    props.extend(message.properties.iter());
+
+    // if we reuse the base_topic string as the target for the serializer,
+    // we end up with an extra ampersand before the key/value pairs
+    let encoded = form_urlencoded::Serializer::new(String::new())
+        .extend_pairs(props.iter())
+        .finish();
+    TopicName::new(format!("{}{}", base_topic.to_string(), encoded))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Message;
+
+    #[test]
+    fn content_type_is_appended_to_topic_name() {
+        let message = Message::builder()
+            .set_body(vec![])
+            .set_content_type("application/json".to_owned())
+            .build();
+
+        let base_topic = TopicName::new("topic/").unwrap();
+
+        let topic_with_properties = build_topic_name(&base_topic, &message).unwrap().to_string();
+
+        assert_eq!("topic/%24.ct=application%2Fjson", topic_with_properties);
+    }
+
+    #[test]
+    fn content_encoding_is_appended_to_topic_name() {
+        let message = Message::builder()
+            .set_body(vec![])
+            .set_content_encoding("utf-8".to_owned())
+            .build();
+
+        let base_topic = TopicName::new("topic/").unwrap();
+
+        let topic_with_properties = build_topic_name(&base_topic, &message).unwrap().to_string();
+
+        assert_eq!("topic/%24.ce=utf-8", topic_with_properties);
+    }
+
+    #[test]
+    fn message_id_is_appended_to_topic_name() {
+        let message = Message::builder()
+            .set_body(vec![])
+            .set_message_id("id".to_owned())
+            .build();
+
+        let base_topic = TopicName::new("topic/").unwrap();
+
+        let topic_with_properties = build_topic_name(&base_topic, &message).unwrap().to_string();
+
+        assert_eq!("topic/%24.mid=id", topic_with_properties);
+    }
+
+    #[test]
+    fn no_system_properties() {
+        let message = Message::new(vec![]);
+        let base_topic = TopicName::new("topic/").unwrap();
+        let actual = build_topic_name(&base_topic, &message).unwrap();
+        assert_eq!(base_topic, actual);
+    }
+
+    #[test]
+    fn app_properties_are_appended_to_topic_name() {
+        let message = Message::builder()
+            .set_body(vec![])
+            .add_message_property("foo".to_owned(), "bar".to_owned())
+            .build();
+
+        let base_topic = TopicName::new("topic/").unwrap();
+
+        let topic_with_properties = build_topic_name(&base_topic, &message).unwrap().to_string();
+
+        assert_eq!("topic/foo=bar", topic_with_properties);
     }
 }
