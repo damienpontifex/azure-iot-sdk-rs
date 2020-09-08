@@ -198,7 +198,7 @@ impl Transport for MqttTransport {
         }
     }
 
-    async fn send_message(&mut self, message: Message) {
+    async fn send_message(&mut self, message: Message) -> std::io::Result<()> {
         let full_topic = build_topic_name(&self.d2c_topic, &message).unwrap();
         trace!("Sending message {:?} to topic {:?}", message, full_topic);
         let publish_packet =
@@ -206,12 +206,7 @@ impl Transport for MqttTransport {
         let mut buf = Vec::new();
         publish_packet.encode(&mut buf).unwrap();
 
-        self.write_socket
-            .lock()
-            .await
-            .write_all(&buf[..])
-            .await
-            .unwrap();
+        self.write_socket.lock().await.write_all(&buf[..]).await
     }
 
     #[cfg(feature = "twin-properties")]

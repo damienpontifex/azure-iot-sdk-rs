@@ -113,8 +113,8 @@ where
     ///     }
     /// }
     /// ```
-    pub async fn send_message(&mut self, message: Message) {
-        self.transport.send_message(message).await;
+    pub async fn send_message(&mut self, message: Message) -> std::io::Result<()> {
+        self.transport.send_message(message).await
     }
 
     /// Send a property update from the device to the cloud

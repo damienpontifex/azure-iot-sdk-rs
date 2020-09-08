@@ -21,7 +21,7 @@ impl DeviceConfig {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> std::io::Result<()> {
     env_logger::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     let config = DeviceConfig::from_env().unwrap();
@@ -40,5 +40,5 @@ async fn main() {
 
     let msg = Message::new(b"Hello, world!".to_vec());
 
-    client.send_message(msg).await;
+    client.send_message(msg).await
 }

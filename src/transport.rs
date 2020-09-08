@@ -24,7 +24,7 @@ pub trait Transport {
     where
         TS: TokenSource + Sync + Send;
     ///
-    async fn send_message(&mut self, message: Message);
+    async fn send_message(&mut self, message: Message) -> std::io::Result<()>;
     ///
     #[cfg(feature = "twin-properties")]
     async fn send_property_update(&mut self, request_id: &str, body: &str);
