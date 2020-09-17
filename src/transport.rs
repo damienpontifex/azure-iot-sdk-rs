@@ -18,13 +18,13 @@ use tokio::sync::mpsc::Receiver;
 
 ///
 #[async_trait]
-pub trait Transport {
+pub trait Transport<T> {
     ///
-    async fn new<TS>(hub_name: &str, device_id: &str, token_source: TS) -> Self
+    async fn new<TS>(hub_name: &str, device_id: &str, token_source: TS) -> crate::Result<T>
     where
         TS: TokenSource + Sync + Send;
     ///
-    async fn send_message(&mut self, message: Message) -> std::io::Result<()>;
+    async fn send_message(&mut self, message: Message) -> crate::Result<()>;
     ///
     #[cfg(feature = "twin-properties")]
     async fn send_property_update(&mut self, request_id: &str, body: &str);

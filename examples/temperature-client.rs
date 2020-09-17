@@ -78,7 +78,7 @@ impl HumiditySensor {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> azure_iot_sdk::Result<()> {
     env_logger::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     let config = DeviceConfig::from_env().unwrap();
@@ -91,7 +91,8 @@ async fn main() {
     .unwrap();
 
     let mut client =
-        IoTHubClient::<MqttTransport>::new(&config.hostname, &config.device_id, token_source).await;
+        IoTHubClient::<MqttTransport>::new(&config.hostname, &config.device_id, token_source)
+            .await?;
 
     info!("Initialized client");
 
@@ -145,7 +146,7 @@ async fn main() {
          * https://rust-lang.github.io/async-book/07_workarounds/03_err_in_async_blocks.html
          */
         #[allow(unreachable_code)]
-        Ok::<(), std::io::Error>(())
+        Ok::<(), Box<dyn std::error::Error>>(())
     };
 
     let mut interval = time::interval(time::Duration::from_secs(5));
@@ -169,7 +170,7 @@ async fn main() {
         }
 
         #[allow(unreachable_code)]
-        Ok::<(), std::io::Error>(())
+        Ok::<(), Box<dyn std::error::Error>>(())
     };
 
     let (_, temp_sender_result, humidity_sender_result) =
@@ -177,4 +178,6 @@ async fn main() {
     //in real life you'd do something useful, like restart the process
     temp_sender_result.unwrap();
     humidity_sender_result.unwrap();
+
+    Ok(())
 }
