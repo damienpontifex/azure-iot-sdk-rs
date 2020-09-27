@@ -27,7 +27,7 @@
 //! use azure_iot_sdk::{IoTHubClient, DeviceKeyTokenSource, MqttTransport, Message};
 //!
 //! #[tokio::main]
-//! async fn main() {
+//! async fn main() -> azure_iot_sdk::Result<()> {
 //!     let iothub_hostname = "iothubname.azure-devices.net";
 //!     let device_id = "MyDeviceId";
 //!     let token_source = DeviceKeyTokenSource::new(
@@ -37,7 +37,7 @@
 //!     ).unwrap();
 //!
 //!     let mut client =
-//!         IoTHubClient::<MqttTransport>::new(iothub_hostname, device_id, token_source).await;
+//!         IoTHubClient::<MqttTransport>::new(iothub_hostname, device_id, token_source).await?;
 //!
 //!     let mut interval = time::interval(time::Duration::from_secs(1));
 //!     let mut count: u32 = 0;
@@ -50,10 +50,12 @@
 //!             .set_message_id(format!("{}-t", count))
 //!             .build();
 //!
-//!         client.send_message(msg).await;
+//!         client.send_message(msg).await?;
 //!
 //!         count += 1;
 //!     }
+//!
+//!     Ok(())
 //! }
 //! ```
 
@@ -88,3 +90,6 @@ pub mod transport;
 #[cfg(feature = "with-provision")]
 /// Provision support using Azure device provisioning service
 pub mod provision;
+
+/// Convenience type alias for `std::result::Result<T, Box<dyn std::error::Error>>`
+pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;

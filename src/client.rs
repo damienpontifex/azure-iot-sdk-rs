@@ -19,7 +19,7 @@ use tokio::sync::mpsc::Receiver;
 #[derive(Debug, Clone)]
 pub struct IoTHubClient<'a, TR>
 where
-    TR: Transport,
+    TR: Transport<TR>,
 {
     device_id: &'a str,
     transport: TR,
@@ -27,7 +27,7 @@ where
 
 impl<'a, TR> IoTHubClient<'a, TR>
 where
-    TR: Transport,
+    TR: Transport<TR>,
 {
     /// Create a new IoT Hub device client using a shared access signature
     ///
@@ -59,21 +59,21 @@ where
         hub_name: &str,
         device_id: &'a str,
         token_source: TS,
-    ) -> IoTHubClient<'a, TR>
+    ) -> crate::Result<IoTHubClient<'a, TR>>
     where
         TS: TokenSource + Sync + Send,
     {
-        let transport = TR::new(hub_name, device_id, token_source).await;
+        let transport = TR::new(hub_name, device_id, token_source).await?;
         //         #[cfg(not(any(feature = "http-transport", feature = "amqp-transport")))]
         //         let transport = MqttTransport::new(hub_name, device_id, token_source).await;
         //
         //         #[cfg(feature = "http-transport")]
         //         let transport = HttpTransport::new(hub_name, device_id, token_source).await;
 
-        Self {
+        Ok(Self {
             device_id,
             transport,
-        }
+        })
     }
 
     /// Send a device to cloud message for this device to the IoT Hub
@@ -84,7 +84,7 @@ where
     /// use azure_iot_sdk::{IoTHubClient, DeviceKeyTokenSource, MqttTransport, Message};
     ///
     /// #[tokio::main]
-    /// async fn main() {
+    /// async fn main() -> azure_iot_sdk::Result<()> {
     ///     let iothub_hostname = "iothubname.azure-devices.net";
     ///     let device_id = "MyDeviceId";
     ///     let token_source = DeviceKeyTokenSource::new(
@@ -94,7 +94,7 @@ where
     ///     ).unwrap();
     ///
     ///     let mut client =
-    ///         IoTHubClient::<MqttTransport>::new(iothub_hostname, device_id, token_source).await;
+    ///         IoTHubClient::<MqttTransport>::new(iothub_hostname, device_id, token_source).await?;
     ///
     ///     let mut interval = time::interval(time::Duration::from_secs(1));
     ///     let mut count: u32 = 0;
@@ -107,14 +107,14 @@ where
     ///             .set_message_id(format!("{}-t", count))
     ///             .build();
     ///
-    ///         client.send_message(msg).await;
+    ///         client.send_message(msg).await?;
     ///
     ///         count += 1;
     ///     }
     /// }
     /// ```
-    pub async fn send_message(&mut self, message: Message) {
-        self.transport.send_message(message).await;
+    pub async fn send_message(&mut self, message: Message) -> crate::Result<()> {
+        self.transport.send_message(message).await
     }
 
     /// Send a property update from the device to the cloud

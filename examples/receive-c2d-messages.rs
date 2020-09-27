@@ -21,7 +21,7 @@ impl DeviceConfig {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> azure_iot_sdk::Result<()> {
     env_logger::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     let config = DeviceConfig::from_env().unwrap();
@@ -34,7 +34,8 @@ async fn main() {
     .unwrap();
 
     let mut client =
-        IoTHubClient::<MqttTransport>::new(&config.hostname, &config.device_id, token_source).await;
+        IoTHubClient::<MqttTransport>::new(&config.hostname, &config.device_id, token_source)
+            .await?;
 
     info!("Initialized client");
 
@@ -45,4 +46,6 @@ async fn main() {
             _ => {}
         }
     }
+
+    Ok(())
 }

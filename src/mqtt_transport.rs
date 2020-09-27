@@ -96,8 +96,8 @@ const REQUEST_ID_PARAM: &str = "?$rid=";
 /// ```no_run
 /// // let (read_socket, write_socket) = client::connect("myiothub".to_string(), "myfirstdevice".to_string(), "SharedAccessSignature sr=myiothub.azure-devices.net%2Fdevices%2Fmyfirstdevice&sig=blahblah&se=1586909077".to_string()).await;
 /// ```
-async fn tcp_connect(iot_hub: &str) -> TlsStream<TcpStream> {
-    let socket = TcpStream::connect((iot_hub, 8883)).await.unwrap();
+async fn tcp_connect(iot_hub: &str) -> crate::Result<TlsStream<TcpStream>> {
+    let socket = TcpStream::connect((iot_hub, 8883)).await?;
 
     trace!("Connected to tcp socket {:?}", socket);
 
@@ -108,11 +108,11 @@ async fn tcp_connect(iot_hub: &str) -> TlsStream<TcpStream> {
             .unwrap(),
     );
 
-    let socket = cx.connect(&iot_hub, socket).await.unwrap();
+    let socket = cx.connect(&iot_hub, socket).await?;
 
     trace!("Connected tls context {:?}", cx);
 
-    socket
+    Ok(socket)
 }
 
 async fn ping(interval: u16) {
@@ -144,12 +144,16 @@ pub struct MqttTransport {
 // }
 
 #[async_trait]
-impl Transport for MqttTransport {
-    async fn new<TS>(hub_name: &str, device_id: &str, token_source: TS) -> MqttTransport
+impl Transport<MqttTransport> for MqttTransport {
+    async fn new<TS>(
+        hub_name: &str,
+        device_id: &str,
+        token_source: TS,
+    ) -> crate::Result<MqttTransport>
     where
         TS: TokenSource + Sync + Send,
     {
-        let mut socket = tcp_connect(&hub_name).await;
+        let mut socket = tcp_connect(&hub_name).await?;
 
         let mut conn = ConnectPacket::new("MQTT", device_id);
         conn.set_client_identifier(device_id);
@@ -168,37 +172,43 @@ impl Transport for MqttTransport {
 
         let mut buf = Vec::new();
         conn.encode(&mut buf).unwrap();
-        socket.write_all(&buf[..]).await.unwrap();
+        socket.write_all(&buf[..]).await?;
 
         let packet = VariablePacket::parse(&mut socket).await;
 
         trace!("PACKET {:?}", packet);
         match packet {
+            //TODO: Enum error type instead of strings
             Ok(VariablePacket::ConnackPacket(connack)) => {
                 if connack.connect_return_code() != ConnectReturnCode::ConnectionAccepted {
-                    panic!(
+                    Err(format!(
                         "Failed to connect to server, return code {:?}",
                         connack.connect_return_code()
-                    );
+                    ))
+                } else {
+                    Ok(())
                 }
             }
-            Ok(pck) => panic!("Unexpected packet received after connect {:?}", pck),
-            Err(err) => panic!("Error decoding connack packet {:?}", err),
-        }
+            Ok(pck) => Err(format!(
+                "Unexpected packet received after connect {:?}",
+                pck
+            )),
+            Err(err) => Err(format!("Error decoding connack packet {:?}", err)),
+        }?;
 
         let (read_socket, write_socket) = tokio::io::split(socket);
 
-        Self {
+        Ok(Self {
             write_socket: Arc::new(Mutex::new(write_socket)),
             read_socket: Arc::new(Mutex::new(read_socket)),
             d2c_topic: TopicName::new(cloud_bound_messages_topic(&device_id)).unwrap(),
             #[cfg(feature = "c2d-messages")]
             rx_topic_prefix: device_bound_messages_topic_prefix(&device_id),
             // rx_loop_handle: None,
-        }
+        })
     }
 
-    async fn send_message(&mut self, message: Message) {
+    async fn send_message(&mut self, message: Message) -> crate::Result<()> {
         let full_topic = build_topic_name(&self.d2c_topic, &message).unwrap();
         trace!("Sending message {:?} to topic {:?}", message, full_topic);
         let publish_packet =
@@ -206,12 +216,8 @@ impl Transport for MqttTransport {
         let mut buf = Vec::new();
         publish_packet.encode(&mut buf).unwrap();
 
-        self.write_socket
-            .lock()
-            .await
-            .write_all(&buf[..])
-            .await
-            .unwrap();
+        self.write_socket.lock().await.write_all(&buf[..]).await?;
+        Ok(())
     }
 
     #[cfg(feature = "twin-properties")]

@@ -78,7 +78,7 @@ impl HumiditySensor {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> azure_iot_sdk::Result<()> {
     env_logger::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     let config = DeviceConfig::from_env().unwrap();
@@ -91,7 +91,8 @@ async fn main() {
     .unwrap();
 
     let mut client =
-        IoTHubClient::<MqttTransport>::new(&config.hostname, &config.device_id, token_source).await;
+        IoTHubClient::<MqttTransport>::new(&config.hostname, &config.device_id, token_source)
+            .await?;
 
     info!("Initialized client");
 
@@ -136,10 +137,16 @@ async fn main() {
                 .set_message_id(format!("{}-t", count))
                 .build();
 
-            temp_client.send_message(msg).await;
+            temp_client.send_message(msg).await?;
 
             count += 1;
         }
+        /*
+         * We need the explicit return so the compiler can figure out the return type of the async block.
+         * https://rust-lang.github.io/async-book/07_workarounds/03_err_in_async_blocks.html
+         */
+        #[allow(unreachable_code)]
+        Ok::<(), Box<dyn std::error::Error>>(())
     };
 
     let mut interval = time::interval(time::Duration::from_secs(5));
@@ -157,11 +164,20 @@ async fn main() {
                 .set_message_id(format!("{}-h", count))
                 .build();
 
-            client.send_message(msg).await;
+            client.send_message(msg).await?;
 
             count += 1;
         }
+
+        #[allow(unreachable_code)]
+        Ok::<(), Box<dyn std::error::Error>>(())
     };
 
-    futures::join!(receive_loop, temp_sender, humidity_sender);
+    let (_, temp_sender_result, humidity_sender_result) =
+        futures::join!(receive_loop, temp_sender, humidity_sender);
+    //in real life you'd do something useful, like restart the process
+    temp_sender_result.unwrap();
+    humidity_sender_result.unwrap();
+
+    Ok(())
 }

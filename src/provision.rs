@@ -59,7 +59,7 @@ impl std::error::Error for ErrorKind {}
 
 impl<'a, TR> IoTHubClient<'a, TR>
 where
-    TR: Transport,
+    TR: Transport<TR>,
 {
     /// Create a new IoT Hub device client using the device provisioning service
     ///
@@ -162,7 +162,8 @@ where
         }
 
         let token_source = DeviceKeyTokenSource::new(&hubname, device_id, device_key).unwrap();
-        Ok(IoTHubClient::new(&hubname, device_id, token_source).await)
+        let client = IoTHubClient::new(&hubname, device_id, token_source).await?;
+        Ok(client)
     }
 }
 
