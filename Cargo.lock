@@ -70,7 +70,7 @@ dependencies = [
  "serde_json",
  "serde_urlencoded",
  "sha2",
- "tokio",
+ "tokio 0.3.0",
  "tokio-native-tls",
 ]
 
@@ -404,7 +404,7 @@ dependencies = [
  "indexmap",
  "log",
  "slab",
- "tokio",
+ "tokio 0.2.18",
  "tokio-util",
 ]
 
@@ -482,7 +482,7 @@ dependencies = [
  "net2",
  "pin-project",
  "time",
- "tokio",
+ "tokio 0.2.18",
  "tower-service",
  "want",
 ]
@@ -496,7 +496,7 @@ dependencies = [
  "bytes",
  "hyper",
  "native-tls",
- "tokio",
+ "tokio 0.2.18",
  "tokio-tls",
 ]
 
@@ -621,10 +621,23 @@ dependencies = [
  "kernel32-sys",
  "libc",
  "log",
- "miow",
+ "miow 0.2.1",
  "net2",
  "slab",
  "winapi 0.2.8",
+]
+
+[[package]]
+name = "mio"
+version = "0.7.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e53a6ea5f38c0a48ca42159868c6d8e1bd56c0451238856cc08d58563643bdc3"
+dependencies = [
+ "libc",
+ "log",
+ "miow 0.3.5",
+ "ntapi",
+ "winapi 0.3.8",
 ]
 
 [[package]]
@@ -640,16 +653,26 @@ dependencies = [
 ]
 
 [[package]]
-name = "mqtt-protocol"
-version = "0.8.1"
+name = "miow"
+version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ad527bd1d7917664e1f35f30ac9d0a01fa1425c52c66494a5b875e8b8848058"
+checksum = "07b88fb9795d4d36d62a012dfbf49a8f5cf12751f36d31a9dbe66d528e58979e"
+dependencies = [
+ "socket2",
+ "winapi 0.3.8",
+]
+
+[[package]]
+name = "mqtt-protocol"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3bcd47e4e18c644d5e83ffaa560691eab7f56dfef30a022ce5f3c45782a3ea1a"
 dependencies = [
  "byteorder",
  "lazy_static",
  "log",
  "regex",
- "tokio",
+ "tokio 0.3.0",
 ]
 
 [[package]]
@@ -696,6 +719,15 @@ dependencies = [
  "lexical-core",
  "memchr",
  "version_check",
+]
+
+[[package]]
+name = "ntapi"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a31937dea023539c72ddae0e3571deadc1414b300483fa7aaec176168cfa9d2"
+dependencies = [
+ "winapi 0.3.8",
 ]
 
 [[package]]
@@ -1109,6 +1141,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "05720e22615919e4734f6a99ceae50d00226c3c5aca406e102ebc33298214e0a"
 
 [[package]]
+name = "socket2"
+version = "0.3.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1fa70dc5c8104ec096f4fe7ede7a221d35ae13dcd19ba1ad9a81d2cab9a1c44"
+dependencies = [
+ "cfg-if",
+ "libc",
+ "redox_syscall",
+ "winapi 0.3.8",
+]
+
+[[package]]
 name = "static_assertions"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1186,7 +1230,23 @@ dependencies = [
  "iovec",
  "lazy_static",
  "memchr",
- "mio",
+ "mio 0.6.21",
+ "pin-project-lite",
+ "slab",
+]
+
+[[package]]
+name = "tokio"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7137dbb0abee577362ccdc7df21605cfcbb949243aeab47dac9ea6ef7d830e21"
+dependencies = [
+ "bytes",
+ "fnv",
+ "lazy_static",
+ "libc",
+ "memchr",
+ "mio 0.7.3",
  "num_cpus",
  "pin-project-lite",
  "slab",
@@ -1195,9 +1255,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-macros"
-version = "0.2.5"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0c3acc6aa564495a0f2e1d59fab677cd7f81a19994cfc7f3ad0e64301560389"
+checksum = "d48caa7b66c7a6ec943edf78d21a594fbeb24e536c781da67d5c32edec54103f"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1206,12 +1266,12 @@ dependencies = [
 
 [[package]]
 name = "tokio-native-tls"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd608593a919a8e05a7d1fc6df885e40f6a88d3a70a3a7eff23ff27964eda069"
+checksum = "501c8252b73bd01379aaae1521523c2629ff1bc6ea46c29e0baff515cee60f1b"
 dependencies = [
  "native-tls",
- "tokio",
+ "tokio 0.3.0",
 ]
 
 [[package]]
@@ -1221,7 +1281,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7bde02a3a5291395f59b06ec6945a3077602fac2b07eeeaf0dee2122f3619828"
 dependencies = [
  "native-tls",
- "tokio",
+ "tokio 0.2.18",
 ]
 
 [[package]]
@@ -1235,7 +1295,7 @@ dependencies = [
  "futures-sink",
  "log",
  "pin-project-lite",
- "tokio",
+ "tokio 0.2.18",
 ]
 
 [[package]]

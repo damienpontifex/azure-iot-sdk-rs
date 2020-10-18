@@ -9,7 +9,8 @@ use mqtt::TopicName;
     feature = "twin-properties"
 ))]
 use mqtt::{QualityOfService, TopicFilter};
-use tokio::io::{AsyncWriteExt, ReadHalf, WriteHalf};
+use tokio::io::{ReadHalf, WriteHalf};
+use tokio::prelude::*;
 use tokio::net::TcpStream;
 #[cfg(any(
     feature = "direct-methods",
@@ -18,7 +19,6 @@ use tokio::net::TcpStream;
 ))]
 use tokio::sync::mpsc::{channel, Receiver};
 use tokio::sync::Mutex;
-use tokio::time;
 use tokio_native_tls::{TlsConnector, TlsStream};
 
 use async_trait::async_trait;
@@ -115,14 +115,14 @@ async fn tcp_connect(iot_hub: &str) -> crate::Result<TlsStream<TcpStream>> {
     Ok(socket)
 }
 
-async fn ping(interval: u16) {
-    let mut ping_interval = time::interval(time::Duration::from_secs(interval.into()));
-    loop {
-        ping_interval.tick().await;
+// async fn ping(interval: u16) {
+//     let mut ping_interval = time::interval(time::Duration::from_secs(interval.into()));
+//     loop {
+//         ping_interval.tick().await;
 
-        // sender.send(SendType::Ping).await.unwrap();
-    }
-}
+//         // sender.send(SendType::Ping).await.unwrap();
+//     }
+// }
 
 ///
 #[derive(Debug, Clone)]
@@ -302,7 +302,7 @@ impl Transport<MqttTransport> for MqttTransport {
         feature = "twin-properties"
     ))]
     async fn get_receiver(&mut self) -> Receiver<MessageType> {
-        let (mut handler_tx, handler_rx) = channel::<MessageType>(3);
+        let (handler_tx, handler_rx) = channel::<MessageType>(3);
 
         let mut cloned_self = self.clone();
         let _ = tokio::spawn(async move {
