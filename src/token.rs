@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, Mac, NewMac};
 use sha2::Sha256;
 
 const DEVICEID_KEY: &str = "DeviceId";
@@ -127,9 +127,9 @@ pub(crate) fn generate_token(key: &str, message: &str) -> String {
     // Checked base64 and hmac in new so should be safe to unwrap here
     let key = base64::decode(&key).unwrap();
     let mut mac = Hmac::<Sha256>::new_varkey(&key).unwrap();
-    mac.input(message.as_bytes());
-    let mac_result = mac.result().code();
-    let signature = base64::encode(mac_result.as_ref());
+    mac.update(message.as_bytes());
+    let mac_result = mac.finalize();
+    let signature = base64::encode(mac_result.into_bytes());
 
     let pairs = &vec![("sig", signature)];
     serde_urlencoded::to_string(pairs).unwrap()
