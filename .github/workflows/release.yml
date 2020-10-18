@@ -16,9 +16,7 @@ jobs:
       uses: actions-rs/cargo@v1
       with:
         command: login
-        args:  ${CRATES_IO_TOKEN}
-      env:
-        CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+        args: ${{ secrets.CARGO_API_TOKEN }}
 
     - name: Publish to crates.io
       uses: actions-rs/cargo@v1
