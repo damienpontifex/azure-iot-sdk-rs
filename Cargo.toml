@@ -20,32 +20,32 @@ with-provision = ["hyper", "hyper-tls"]
 
 [dependencies]
 log = "0.4.0"
-mqtt-protocol = { version = "0.9.0", features = ["async"] }
-serde_urlencoded = "0.6.1"
-serde_json = "1.0.55"
+mqtt-protocol = { version = "0.9", features = ["async"] }
+serde_urlencoded = "0.7"
+serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
-tokio = { version = "0.3.0", features = ["rt-multi-thread", "macros", "net", "io-util", "time", "sync"] }
+tokio = { version = "0.3", features = ["rt-multi-thread", "macros", "net", "io-util", "time", "sync"] }
 native-tls = "0.2.4"
-tokio-native-tls = "0.2.0"
+tokio-native-tls = "0.2"
 futures = "0.3"
-chrono = "0.4.11"
-hmac = "0.7.1"
-sha2 = "0.8.1"
-base64 = "0.12.0"
-async-trait = "0.1.30"
+chrono = "0.4"
+hmac = "0.10"
+sha2 = "0.9"
+base64 = "0.13"
+async-trait = "0.1"
 hyper = { version = "0.13", optional = true }
-hyper-tls = { version = "0.4.1", optional = true }
-form_urlencoded = "1.0.0"
+hyper-tls = { version = "0.4", optional = true }
+form_urlencoded = "1.0"
 
 [dev-dependencies]
-log = "0.4.0"
-env_logger = "0.7.1"
-rand = "0.7.3"
-rand_distr = "0.2.2"
-config = "0.10.1"
+log = "0.4"
+env_logger = "0.8"
+rand = "0.7"
+rand_distr = "0.3"
+config = "0.10"
 dotenv = "0.15"
 serde_json = "1.0"
-chrono = { version = "0.4.11", features = ["serde"] }
+chrono = { version = "0.4", features = ["serde"] }
 
 [[example]]
 name = "send-message"
