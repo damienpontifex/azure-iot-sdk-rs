@@ -138,7 +138,7 @@ where
         let mut retries: i32 = 0;
         let mut hubname = String::new();
         while retries < max_retries {
-            tokio::time::delay_for(std::time::Duration::from_secs(3)).await;
+            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
             let req = Request::builder()
                 .method(Method::GET)
                 .uri(&url)
