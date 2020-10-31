@@ -11,10 +11,11 @@ license = "MIT"
 readme = "README.md"
 
 [features]
-default = ["c2d-messages", "direct-methods", "twin-properties", "with-provision"]
+default = ["c2d-messages", "direct-methods", "twin-properties", "with-provision", "error-handling-messages"]
 direct-methods = []
 twin-properties = []
 c2d-messages = []
+error-handling-messages = []
 http-transport = ["hyper", "hyper-tls"]
 with-provision = ["hyper", "hyper-tls"]
 

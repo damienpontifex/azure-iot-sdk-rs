@@ -299,7 +299,8 @@ impl Transport<MqttTransport> for MqttTransport {
     #[cfg(any(
         feature = "direct-methods",
         feature = "c2d-messages",
-        feature = "twin-properties"
+        feature = "twin-properties",
+        feature = "error-handling-messages",
     ))]
     async fn get_receiver(&mut self) -> Receiver<MessageType> {
         let (handler_tx, handler_rx) = channel::<MessageType>(3);
@@ -311,6 +312,15 @@ impl Transport<MqttTransport> for MqttTransport {
                 let packet = match VariablePacket::parse(&mut *socket).await {
                     Ok(pk) => pk,
                     Err(err) => {
+                        #[cfg(feature = "error-handling-messages")]
+                        if handler_tx
+                            .send(MessageType::ErrorReceive(err))
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
+                        #[cfg(not(feature = "error-handling-messages"))]
                         error!("Error in receiving packet {}", err);
                         continue;
                     }
