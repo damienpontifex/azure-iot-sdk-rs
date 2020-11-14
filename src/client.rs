@@ -168,4 +168,9 @@ where
     pub async fn respond_to_direct_method(&mut self, response: DirectMethodResponse) {
         self.transport.respond_to_direct_method(response).await
     }
+
+    ///
+    pub async fn ping(&mut self) {
+        self.transport.ping().await
+    }
 }
