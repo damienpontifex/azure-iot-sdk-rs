@@ -365,7 +365,7 @@ impl Transport<MqttTransport> for MqttTransport {
                                 break;
                             }
 
-                            return;
+                            continue;
                         }
 
                         #[cfg(feature = "twin-properties")]
@@ -379,7 +379,7 @@ impl Transport<MqttTransport> for MqttTransport {
                                 break;
                             }
 
-                            return;
+                            continue;
                         }
 
                         #[cfg(feature = "direct-methods")]
@@ -407,7 +407,7 @@ impl Transport<MqttTransport> for MqttTransport {
                                 break;
                             }
 
-                            return;
+                            continue;
                         }
                     }
                     _ => {}
