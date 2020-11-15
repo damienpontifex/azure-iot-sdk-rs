@@ -11,7 +11,7 @@ use crate::{
 use std::collections::HashMap;
 
 const DPS_HOST: &str = "https://global.azure-devices-provisioning.net";
-const DPS_API_VERSION: &str = "api-version=2018-11-01";
+const DPS_API_VERSION: &str = "api-version=2019-03-31";
 
 fn generate_registration_sas(
     scope: &str,
