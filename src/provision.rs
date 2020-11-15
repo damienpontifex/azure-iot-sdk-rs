@@ -123,10 +123,13 @@ where
             .header(header::CONTENT_TYPE, "application/json")
             .header(header::AUTHORIZATION, sas.clone())
             .body(Body::from(serde_json::to_string(&map).unwrap()))?;
+        trace!("Request body {}", serde_json::to_string_pretty(&map).unwrap());
         let https = HttpsConnector::new();
         let client = Client::builder().build::<_, hyper::Body>(https);
         let res = client.request(req).await?;
         if res.status() != StatusCode::ACCEPTED {
+            let body = hyper::body::to_bytes(res).await.unwrap();
+            error!("Rejection {:#?}", body);
             return Err(Box::new(ErrorKind::AzureProvisioningRejectedRequest));
         }
         let body = hyper::body::to_bytes(res).await.unwrap();
