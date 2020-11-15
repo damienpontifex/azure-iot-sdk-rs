@@ -69,7 +69,7 @@ where
     /// * `scope` - The scope ID to use for the registration call
     /// * `device_id` - The registered device to connect as
     /// * `key` - The primary or secondary key for this device
-    /// * `properties` - (optional) additional properties to send to the DPS
+    /// * `payload` - (optional) additional payload to send to the DPS
     /// * `max_retries` - The maximum number of retries at the provisioning service
     ///
     /// Note that this uses the default Azure device provisioning
@@ -94,7 +94,7 @@ where
         scope_id: &str,
         device_id: &'a str,
         device_key: &'a str,
-        properties: Option<HashMap<String, String>>,
+        payload: Option<String>,
         max_retries: i32,
     ) -> Result<IoTHubClient<'a, TR>, Box<dyn std::error::Error>> {
         let expiry = Utc::now() + Duration::days(1);
@@ -112,10 +112,11 @@ where
             "registrationId".to_string(),
             serde_json::Value::String(device_id.to_string()),
         );
-        if let Some(props) = properties {
-            for (name, value) in props {
-                map.insert(name, serde_json::Value::String(value));
-            }
+        if let Some(payload) = payload {
+            map.insert(
+                "payload".to_string(),
+                serde_json::Value::String(payload)
+            );
         }
         let req = Request::builder()
             .method(Method::PUT)
