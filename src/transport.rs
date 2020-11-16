@@ -23,6 +23,7 @@ pub trait Transport<T> {
     async fn new<TS>(hub_name: &str, device_id: &str, token_source: TS) -> crate::Result<T>
     where
         TS: TokenSource + Sync + Send;
+
     ///
     async fn send_message(&mut self, message: Message) -> crate::Result<()>;
     ///

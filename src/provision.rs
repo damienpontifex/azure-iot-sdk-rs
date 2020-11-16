@@ -7,6 +7,7 @@ use crate::{
     client::IoTHubClient,
     token::{generate_token, DeviceKeyTokenSource},
     transport::Transport,
+    MqttTransport, TokenSource,
 };
 use std::collections::HashMap;
 
@@ -58,6 +59,114 @@ impl std::fmt::Display for ErrorKind {
 
 impl std::error::Error for ErrorKind {}
 
+/// Use the device provision service to get our IoT Hubname
+///
+/// # Arguments
+///
+/// * `scope` - The scope ID to use for the registration call
+/// * `device_id` - The registered device to connect as
+/// * `key` - The primary or secondary key for this device
+/// * `max_retries` - The maximum number of retries at the provisioning service
+///
+/// Note that this uses the default Azure device provisioning
+/// service, which may be blocked in some countries.
+///
+/// # Example
+/// ```no_run
+/// use azure_iot_sdk::provision::get_iothub_from_provision_service;
+///
+/// #[tokio::main]
+/// async fn main() {
+///
+/// let mut client = get_iothub_from_provision_service(
+///           "ScopeID",
+///           "DeviceID",
+///           "DeviceKey",
+///           4).await;
+/// }
+/// ```
+#[cfg(feature = "with-provision")]
+pub async fn get_iothub_from_provision_service(
+    scope_id: &str,
+    device_id: &str,
+    device_key: &str,
+    max_retries: i32,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let expiry = Utc::now() + Duration::days(1);
+    let expiry = expiry.timestamp();
+    let sas = generate_registration_sas(scope_id, device_id, device_key, expiry);
+    let url = format!(
+        "{dps}/{scope_id}/registrations/{device_id}/register?{api}",
+        dps = DPS_HOST,
+        scope_id = scope_id,
+        device_id = device_id,
+        api = DPS_API_VERSION
+    );
+    let mut map = serde_json::Map::new();
+    map.insert(
+        "registrationId".to_string(),
+        serde_json::Value::String(device_id.to_string()),
+    );
+    let req = Request::builder()
+        .method(Method::PUT)
+        .uri(&url)
+        .header(header::CONTENT_TYPE, "application/json")
+        .header(header::AUTHORIZATION, sas.clone())
+        .body(Body::from(serde_json::to_string(&map).unwrap()))?;
+    trace!(
+        "Request body {}",
+        serde_json::to_string_pretty(&map).unwrap()
+    );
+    let https = HttpsConnector::new();
+    let client = Client::builder().build::<_, hyper::Body>(https);
+    let res = client.request(req).await?;
+    if res.status() != StatusCode::ACCEPTED {
+        let body = hyper::body::to_bytes(res).await.unwrap();
+        error!("Rejection {:#?}", body);
+        return Err(Box::new(ErrorKind::AzureProvisioningRejectedRequest));
+    }
+    let body = hyper::body::to_bytes(res).await.unwrap();
+    let reply: serde_json::Map<String, serde_json::Value> = serde_json::from_slice(&body).unwrap();
+    if !reply.contains_key("operationId") {
+        return Err(Box::new(ErrorKind::ProvisionRequestReplyMissingOperationId));
+    }
+    let operation = reply.get("operationId").unwrap().as_str().unwrap();
+    let url = format!(
+        "{dps}/{scope_id}/registrations/{device_id}/operations/{operation}?{api}",
+        dps = DPS_HOST,
+        scope_id = scope_id,
+        device_id = device_id,
+        operation = operation,
+        api = DPS_API_VERSION
+    );
+    let mut retries: i32 = 0;
+    let mut hubname = String::new();
+    while retries < max_retries {
+        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+        let req = Request::builder()
+            .method(Method::GET)
+            .uri(&url)
+            .header(header::CONTENT_TYPE, "application/json")
+            .header(header::AUTHORIZATION, sas.clone())
+            .body(Body::empty())?;
+        let res = client.request(req).await?;
+        if res.status() == StatusCode::OK {
+            let body = hyper::body::to_bytes(res).await.unwrap();
+            let reply: serde_json::Map<String, serde_json::Value> =
+                serde_json::from_slice(&body).unwrap();
+            let registration_state = reply["registrationState"].as_object().unwrap();
+            let hub = registration_state["assignedHub"].as_str().unwrap();
+            hubname = hub.to_string();
+            break;
+        }
+        retries += 1;
+    }
+    if hubname.is_empty() {
+        return Err(Box::new(ErrorKind::FailedToGetIotHub));
+    }
+    Ok(hubname)
+}
+
 impl<'a, TR> IoTHubClient<'a, TR>
 where
     TR: Transport<TR>,
@@ -69,7 +178,6 @@ where
     /// * `scope` - The scope ID to use for the registration call
     /// * `device_id` - The registered device to connect as
     /// * `key` - The primary or secondary key for this device
-    /// * `payload` - (optional) additional payload to send to the DPS
     /// * `max_retries` - The maximum number of retries at the provisioning service
     ///
     /// Note that this uses the default Azure device provisioning
@@ -85,7 +193,6 @@ where
     ///           "ScopeID",
     ///           "DeviceID",
     ///           "DeviceKey",
-    ///           None,
     ///           4).await;
     /// }
     /// ```
@@ -94,85 +201,10 @@ where
         scope_id: &str,
         device_id: &'a str,
         device_key: &'a str,
-        payload: Option<String>,
         max_retries: i32,
     ) -> Result<IoTHubClient<'a, TR>, Box<dyn std::error::Error>> {
-        let expiry = Utc::now() + Duration::days(1);
-        let expiry = expiry.timestamp();
-        let sas = generate_registration_sas(scope_id, device_id, device_key, expiry);
-        let url = format!(
-            "{dps}/{scope_id}/registrations/{device_id}/register?{api}",
-            dps = DPS_HOST,
-            scope_id = scope_id,
-            device_id = device_id,
-            api = DPS_API_VERSION
-        );
-        let mut map = serde_json::Map::new();
-        map.insert(
-            "registrationId".to_string(),
-            serde_json::Value::String(device_id.to_string()),
-        );
-        if let Some(payload) = payload {
-            map.insert(
-                "payload".to_string(),
-                serde_json::Value::String(payload)
-            );
-        }
-        let req = Request::builder()
-            .method(Method::PUT)
-            .uri(&url)
-            .header(header::CONTENT_TYPE, "application/json")
-            .header(header::AUTHORIZATION, sas.clone())
-            .body(Body::from(serde_json::to_string(&map).unwrap()))?;
-        trace!("Request body {}", serde_json::to_string_pretty(&map).unwrap());
-        let https = HttpsConnector::new();
-        let client = Client::builder().build::<_, hyper::Body>(https);
-        let res = client.request(req).await?;
-        if res.status() != StatusCode::ACCEPTED {
-            let body = hyper::body::to_bytes(res).await.unwrap();
-            error!("Rejection {:#?}", body);
-            return Err(Box::new(ErrorKind::AzureProvisioningRejectedRequest));
-        }
-        let body = hyper::body::to_bytes(res).await.unwrap();
-        let reply: serde_json::Map<String, serde_json::Value> =
-            serde_json::from_slice(&body).unwrap();
-        if !reply.contains_key("operationId") {
-            return Err(Box::new(ErrorKind::ProvisionRequestReplyMissingOperationId));
-        }
-        let operation = reply.get("operationId").unwrap().as_str().unwrap();
-        let url = format!(
-            "{dps}/{scope_id}/registrations/{device_id}/operations/{operation}?{api}",
-            dps = DPS_HOST,
-            scope_id = scope_id,
-            device_id = device_id,
-            operation = operation,
-            api = DPS_API_VERSION
-        );
-        let mut retries: i32 = 0;
-        let mut hubname = String::new();
-        while retries < max_retries {
-            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-            let req = Request::builder()
-                .method(Method::GET)
-                .uri(&url)
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::AUTHORIZATION, sas.clone())
-                .body(Body::empty())?;
-            let res = client.request(req).await?;
-            if res.status() == StatusCode::OK {
-                let body = hyper::body::to_bytes(res).await.unwrap();
-                let reply: serde_json::Map<String, serde_json::Value> =
-                    serde_json::from_slice(&body).unwrap();
-                let registration_state = reply["registrationState"].as_object().unwrap();
-                let hub = registration_state["assignedHub"].as_str().unwrap();
-                hubname = hub.to_string();
-                break;
-            }
-            retries += 1;
-        }
-        if hubname.is_empty() {
-            return Err(Box::new(ErrorKind::FailedToGetIotHub));
-        }
+        let hubname =
+            get_iothub_from_provision_service(scope_id, device_id, device_key, max_retries).await?;
 
         let token_source = DeviceKeyTokenSource::new(&hubname, device_id, device_key).unwrap();
         let client = IoTHubClient::new(&hubname, device_id, token_source).await?;
