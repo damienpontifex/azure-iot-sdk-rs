@@ -1,6 +1,6 @@
-use std::collections::HashMap;
 #[cfg(feature = "error-handling-messages")]
 use mqtt::packet::VariablePacketError;
+use std::collections::HashMap;
 
 /// Type of message received in cloud to device communication
 #[cfg(any(
@@ -22,7 +22,7 @@ pub enum MessageType {
     DirectMethod(DirectMethodInvocation),
     /// Error occurred in the message loop
     #[cfg(feature = "error-handling-messages")]
-    ErrorReceive(VariablePacketError)
+    ErrorReceive(VariablePacketError),
 }
 
 /// Instance to respond to a direct method invocation

@@ -76,6 +76,53 @@ where
         })
     }
 
+    /// Create a new IoT Hub device client using a preconfigured transport.  This is useful
+    /// if you need to customize the user name and password sent to Azure (for example to
+    /// implement an IoT Plug-n-Play device).
+    ///
+    /// # Arguments
+    ///
+    /// * `transport` - The transport to use for this client
+    /// * `device_id` - The registered device to connect as
+    ///
+    /// # Example
+    /// ```no_run
+    /// use azure_iot_sdk::{IoTHubClient, DeviceKeyTokenSource, MqttTransport};
+    /// use chrono::{Duration, Utc};
+    /// use azure_iot_sdk::TokenSource;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let iothub_hostname = "iothubname.azure-devices.net";
+    ///     let device_id = "MyDeviceId";
+    ///     let token_source = DeviceKeyTokenSource::new(
+    ///         iothub_hostname,
+    ///         device_id,
+    ///         "TheAccessKey",
+    ///     ).unwrap();
+    ///     let product_info = "model-id=dtmi:com:example:Thermostat;1";
+    ///     let user_name = format!("{}/{}/?api-version=2020-09-30&{}",iothub_hostname,
+    ///                             device_id, product_info);
+    ///     let expiry = Utc::now() + Duration::days(1);
+    ///     let password = token_source.get(&expiry);
+    ///     let transport = MqttTransport::new_with_username_password(iothub_hostname,
+    ///                                                               &user_name,
+    ///                                                               &password,
+    ///                                                               device_id).await.unwrap();
+    ///     let mut client =
+    ///         IoTHubClient::<MqttTransport>::new_with_transport(transport, device_id).await;
+    /// }
+    /// ```
+    pub async fn new_with_transport(
+        transport: TR,
+        device_id: &'a str,
+    ) -> crate::Result<IoTHubClient<'a, TR>> {
+        Ok(Self {
+            device_id,
+            transport,
+        })
+    }
+
     /// Send a device to cloud message for this device to the IoT Hub
     ///
     /// # Example
@@ -167,5 +214,10 @@ where
     #[cfg(feature = "direct-methods")]
     pub async fn respond_to_direct_method(&mut self, response: DirectMethodResponse) {
         self.transport.respond_to_direct_method(response).await
+    }
+
+    ///
+    pub async fn ping(&mut self) {
+        self.transport.ping().await
     }
 }
