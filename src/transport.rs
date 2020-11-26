@@ -39,7 +39,7 @@ pub trait Transport<T> {
     async fn respond_to_direct_method(&mut self, response: DirectMethodResponse);
 
     ///
-    async fn ping(&mut self);
+    async fn ping(&mut self) -> crate::Result<()>;
 
     ///
     #[cfg(any(

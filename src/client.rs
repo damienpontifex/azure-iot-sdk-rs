@@ -217,7 +217,7 @@ where
     }
 
     ///
-    pub async fn ping(&mut self) {
+    pub async fn ping(&mut self) -> crate::Result<()> {
         self.transport.ping().await
     }
 }

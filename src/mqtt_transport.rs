@@ -236,19 +236,17 @@ impl Transport<MqttTransport> for MqttTransport {
             .unwrap();
     }
 
-    async fn ping(&mut self) {
+    async fn ping(&mut self) -> crate::Result<()> {
         info!("Sending PINGREQ to broker");
 
         let pingreq_packet = PingreqPacket::new();
 
         let mut buf = Vec::new();
         pingreq_packet.encode(&mut buf).unwrap();
-        self.write_socket
-            .lock()
-            .await
-            .write_all(&buf)
-            .await
-            .unwrap();
+        match self.write_socket.lock().await.write_all(&buf).await {
+            Err(e) => Err(Box::new(e)),
+            Ok(_t) => Ok(()),
+        }
     }
 
     #[cfg(any(
