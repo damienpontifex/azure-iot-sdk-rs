@@ -167,7 +167,7 @@ pub async fn get_iothub_from_provision_service(
     Ok(hubname)
 }
 
-impl<'a, TR> IoTHubClient<'a, TR>
+impl<TR> IoTHubClient<TR>
 where
     TR: Transport<TR>,
 {
@@ -199,10 +199,10 @@ where
     #[cfg(feature = "with-provision")]
     pub async fn from_provision_service(
         scope_id: &str,
-        device_id: &'a str,
-        device_key: &'a str,
+        device_id: &str,
+        device_key: &str,
         max_retries: i32,
-    ) -> Result<IoTHubClient<'a, TR>, Box<dyn std::error::Error>> {
+    ) -> Result<IoTHubClient<TR>, Box<dyn std::error::Error>> {
         let hubname =
             get_iothub_from_provision_service(scope_id, device_id, device_key, max_retries).await?;
 

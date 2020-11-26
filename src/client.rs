@@ -17,15 +17,15 @@ use tokio::sync::mpsc::Receiver;
 
 /// Client for communicating with IoT hub
 #[derive(Debug, Clone)]
-pub struct IoTHubClient<'a, TR>
+pub struct IoTHubClient<TR>
 where
     TR: Transport<TR>,
 {
-    device_id: &'a str,
+    device_id: String,
     transport: TR,
 }
 
-impl<'a, TR> IoTHubClient<'a, TR>
+impl<TR> IoTHubClient<TR>
 where
     TR: Transport<TR>,
 {
@@ -57,9 +57,9 @@ where
     /// ```
     pub async fn new<TS>(
         hub_name: &str,
-        device_id: &'a str,
+        device_id: &str,
         token_source: TS,
-    ) -> crate::Result<IoTHubClient<'a, TR>>
+    ) -> crate::Result<IoTHubClient<TR>>
     where
         TS: TokenSource + Sync + Send,
     {
@@ -71,7 +71,7 @@ where
         //         let transport = HttpTransport::new(hub_name, device_id, token_source).await;
 
         Ok(Self {
-            device_id,
+            device_id: device_id.to_string(),
             transport,
         })
     }
@@ -115,10 +115,10 @@ where
     /// ```
     pub async fn new_with_transport(
         transport: TR,
-        device_id: &'a str,
-    ) -> crate::Result<IoTHubClient<'a, TR>> {
+        device_id: &str,
+    ) -> crate::Result<IoTHubClient<TR>> {
         Ok(Self {
-            device_id,
+            device_id: device_id.to_string(),
             transport,
         })
     }
