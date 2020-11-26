@@ -243,10 +243,7 @@ impl Transport<MqttTransport> for MqttTransport {
 
         let mut buf = Vec::new();
         pingreq_packet.encode(&mut buf).unwrap();
-        match self.write_socket.lock().await.write_all(&buf).await {
-            Err(e) => Err(Box::new(e)),
-            Ok(_t) => Ok(()),
-        }
+        self.write_socket.lock().await.write_all(&buf).await.map_err(|e| e.into())
     }
 
     #[cfg(any(
