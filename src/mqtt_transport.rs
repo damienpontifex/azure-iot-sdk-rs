@@ -171,12 +171,16 @@ impl Transport<MqttTransport> for MqttTransport {
         let mut buf = Vec::new();
         publish_packet.encode(&mut buf).unwrap();
 
-        self.write_socket.lock().await.write_all(&buf[..]).await?;
-        Ok(())
+        self.write_socket
+            .lock()
+            .await
+            .write_all(&buf[..])
+            .await
+            .map_err(|e| e.into())
     }
 
     #[cfg(feature = "twin-properties")]
-    async fn send_property_update(&mut self, request_id: &str, body: &str) {
+    async fn send_property_update(&mut self, request_id: &str, body: &str) -> crate::Result<()> {
         trace!("Publishing twin properties with rid = {}", request_id);
         let packet = PublishPacket::new(
             TopicName::new(twin_update_topic(&request_id)).unwrap(),
@@ -190,11 +194,11 @@ impl Transport<MqttTransport> for MqttTransport {
             .await
             .write_all(&buf[..])
             .await
-            .unwrap();
+            .map_err(|e| e.into())
     }
 
     #[cfg(feature = "twin-properties")]
-    async fn request_twin_properties(&mut self, request_id: &str) {
+    async fn request_twin_properties(&mut self, request_id: &str) -> crate::Result<()> {
         trace!(
             "Requesting device twin properties with rid = {}",
             request_id
@@ -211,11 +215,14 @@ impl Transport<MqttTransport> for MqttTransport {
             .await
             .write_all(&buf[..])
             .await
-            .unwrap();
+            .map_err(|e| e.into())
     }
 
     #[cfg(feature = "direct-methods")]
-    async fn respond_to_direct_method(&mut self, response: DirectMethodResponse) {
+    async fn respond_to_direct_method(
+        &mut self,
+        response: DirectMethodResponse,
+    ) -> crate::Result<()> {
         // TODO: Append properties and system properties to topic path
         trace!(
             "Responding to direct method with rid = {}",
@@ -233,7 +240,7 @@ impl Transport<MqttTransport> for MqttTransport {
             .await
             .write_all(&buf[..])
             .await
-            .unwrap();
+            .map_err(|e| e.into())
     }
 
     async fn ping(&mut self) -> crate::Result<()> {
@@ -243,7 +250,12 @@ impl Transport<MqttTransport> for MqttTransport {
 
         let mut buf = Vec::new();
         pingreq_packet.encode(&mut buf).unwrap();
-        self.write_socket.lock().await.write_all(&buf).await.map_err(|e| e.into())
+        self.write_socket
+            .lock()
+            .await
+            .write_all(&buf)
+            .await
+            .map_err(|e| e.into())
     }
 
     #[cfg(any(
@@ -512,12 +524,8 @@ impl MqttTransport {
         let unsubscribe_packet = UnsubscribePacket::new(10, topics);
         let mut buf = Vec::new();
         unsubscribe_packet.encode(&mut buf).unwrap();
-        self.write_socket
-            .lock()
-            .await
-            .write_all(&buf[..])
-            .await
-            .unwrap();
+        // If the connection is lost, do not unwrap.
+        let _ = self.write_socket.lock().await.write_all(&buf[..]).await;
     }
 }
 

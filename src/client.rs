@@ -212,7 +212,10 @@ where
 
     ///
     #[cfg(feature = "direct-methods")]
-    pub async fn respond_to_direct_method(&mut self, response: DirectMethodResponse) {
+    pub async fn respond_to_direct_method(
+        &mut self,
+        response: DirectMethodResponse,
+    ) -> crate::Result<()> {
         self.transport.respond_to_direct_method(response).await
     }
 
