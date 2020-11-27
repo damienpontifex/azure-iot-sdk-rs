@@ -7,9 +7,7 @@ use crate::{
     client::IoTHubClient,
     token::{generate_token, DeviceKeyTokenSource},
     transport::Transport,
-    MqttTransport, TokenSource,
 };
-use std::collections::HashMap;
 
 const DPS_HOST: &str = "https://global.azure-devices-provisioning.net";
 const DPS_API_VERSION: &str = "api-version=2019-03-31";
@@ -183,30 +181,34 @@ where
     /// Note that this uses the default Azure device provisioning
     /// service, which may be blocked in some countries.
     ///
+    /// Warning!  Because currently `hyper` does not use Futures 0.3, you will
+    /// need the `compat` call in or things will fail mysteriously.
+    ///
     /// # Example
     /// ```no_run
     /// use azure_iot_sdk::{IoTHubClient, MqttTransport};
+    /// use tokio_compat_02::FutureExt;
     ///
     /// #[tokio::main]
     /// async fn main() {
     ///     let mut client = IoTHubClient::<MqttTransport>::from_provision_service(
     ///           "ScopeID",
-    ///           "DeviceID",
+    ///           "DeviceID".into(),
     ///           "DeviceKey",
-    ///           4).await;
+    ///           4).compat().await;
     /// }
     /// ```
     #[cfg(feature = "with-provision")]
     pub async fn from_provision_service(
         scope_id: &str,
-        device_id: &str,
+        device_id: String,
         device_key: &str,
         max_retries: i32,
     ) -> Result<IoTHubClient<TR>, Box<dyn std::error::Error>> {
         let hubname =
-            get_iothub_from_provision_service(scope_id, device_id, device_key, max_retries).await?;
+            get_iothub_from_provision_service(scope_id, &device_id, device_key, max_retries).await?;
 
-        let token_source = DeviceKeyTokenSource::new(&hubname, device_id, device_key).unwrap();
+        let token_source = DeviceKeyTokenSource::new(&hubname, &device_id, device_key).unwrap();
         let client = IoTHubClient::new(&hubname, device_id, token_source).await?;
         Ok(client)
     }

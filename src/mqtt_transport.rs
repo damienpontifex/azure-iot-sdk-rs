@@ -147,7 +147,7 @@ pub struct MqttTransport {
 impl Transport<MqttTransport> for MqttTransport {
     async fn new<TS>(
         hub_name: &str,
-        device_id: &str,
+        device_id: String,
         token_source: TS,
     ) -> crate::Result<MqttTransport>
     where
@@ -160,7 +160,7 @@ impl Transport<MqttTransport> for MqttTransport {
         let token = token_source.get(&expiry);
         trace!("Using token {}", token);
 
-        Self::new_with_username_password(hub_name, &user_name, &token, device_id).await
+        Self::new_with_username_password(hub_name, &user_name, &token, &device_id).await
     }
 
     async fn send_message(&mut self, message: Message) -> crate::Result<()> {
@@ -386,7 +386,7 @@ impl Transport<MqttTransport> for MqttTransport {
 
         // Send empty message so hub will respond with device twin data
         #[cfg(feature = "twin-properties")]
-        self.request_twin_properties("0").await;
+        self.request_twin_properties("0").await.unwrap();
 
         // let (abort_handle, abort_registration) = AbortHandle::new_pair();
         // let _ = Abortable::new(handle, abort_registration);

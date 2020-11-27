@@ -52,18 +52,18 @@ where
     ///     ).unwrap();
     ///
     ///     let mut client =
-    ///         IoTHubClient::<MqttTransport>::new(iothub_hostname, device_id, token_source).await;
+    ///         IoTHubClient::<MqttTransport>::new(iothub_hostname, device_id.into(), token_source).await;
     /// }
     /// ```
     pub async fn new<TS>(
         hub_name: &str,
-        device_id: &str,
+        device_id: String,
         token_source: TS,
     ) -> crate::Result<IoTHubClient<TR>>
     where
         TS: TokenSource + Sync + Send,
     {
-        let transport = TR::new(hub_name, device_id, token_source).await?;
+        let transport = TR::new(hub_name, device_id.clone(), token_source).await?;
         //         #[cfg(not(any(feature = "http-transport", feature = "amqp-transport")))]
         //         let transport = MqttTransport::new(hub_name, device_id, token_source).await;
         //
@@ -71,7 +71,7 @@ where
         //         let transport = HttpTransport::new(hub_name, device_id, token_source).await;
 
         Ok(Self {
-            device_id: device_id.to_string(),
+            device_id,
             transport,
         })
     }
@@ -113,9 +113,9 @@ where
     ///         IoTHubClient::<MqttTransport>::new_with_transport(transport, device_id).await;
     /// }
     /// ```
-    pub async fn new_with_transport(
+    pub async fn new_with_transport<S: ToString>(
         transport: TR,
-        device_id: &str,
+        device_id: S,
     ) -> crate::Result<IoTHubClient<TR>> {
         Ok(Self {
             device_id: device_id.to_string(),
@@ -141,7 +141,7 @@ where
     ///     ).unwrap();
     ///
     ///     let mut client =
-    ///         IoTHubClient::<MqttTransport>::new(iothub_hostname, device_id, token_source).await?;
+    ///         IoTHubClient::<MqttTransport>::new(iothub_hostname, device_id.into(), token_source).await?;
     ///
     ///     let mut interval = time::interval(time::Duration::from_secs(1));
     ///     let mut count: u32 = 0;
@@ -192,12 +192,12 @@ where
     /// ```ignore
     ///    let my_struct = MyProperties {property_1 : 31.0, property_2: 42.0};
     ///    let body = serde_json::to_string(&my_struct).unwrap();
-    ///    client.send_property_update(&format!("{}", update_counter), &body).await;
+    ///    client.send_property_update(&format!("{}", update_counter), &body).await.unwrap();
     ///    update_counter += 1;
     /// ```
     #[cfg(feature = "twin-properties")]
-    pub async fn send_property_update(&mut self, request_id: &str, body: &str) {
-        self.transport.send_property_update(request_id, body).await;
+    pub async fn send_property_update(&mut self, request_id: &str, body: &str) -> crate::Result<()> {
+        self.transport.send_property_update(request_id, body).await
     }
 
     ///

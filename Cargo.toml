@@ -47,6 +47,7 @@ config = "0.10"
 dotenv = "0.15"
 serde_json = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
+tokio-compat-02 = "0.1.2"
 
 [[example]]
 name = "send-message"

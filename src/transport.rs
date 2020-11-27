@@ -20,7 +20,7 @@ use tokio::sync::mpsc::Receiver;
 #[async_trait]
 pub trait Transport<T> {
     ///
-    async fn new<TS>(hub_name: &str, device_id: &str, token_source: TS) -> crate::Result<T>
+    async fn new<TS>(hub_name: &str, device_id: String, token_source: TS) -> crate::Result<T>
     where
         TS: TokenSource + Sync + Send;
 

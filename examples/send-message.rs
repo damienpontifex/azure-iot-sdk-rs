@@ -34,7 +34,7 @@ async fn main() -> azure_iot_sdk::Result<()> {
     .unwrap();
 
     let mut client =
-        IoTHubClient::<MqttTransport>::new(&config.hostname, &config.device_id, token_source)
+        IoTHubClient::<MqttTransport>::new(&config.hostname, config.device_id.clone(), token_source)
             .await?;
 
     info!("Initialized client");
