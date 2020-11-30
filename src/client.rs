@@ -196,7 +196,11 @@ where
     ///    update_counter += 1;
     /// ```
     #[cfg(feature = "twin-properties")]
-    pub async fn send_property_update(&mut self, request_id: &str, body: &str) -> crate::Result<()> {
+    pub async fn send_property_update(
+        &mut self,
+        request_id: &str,
+        body: &str,
+    ) -> crate::Result<()> {
         self.transport.send_property_update(request_id, body).await
     }
 

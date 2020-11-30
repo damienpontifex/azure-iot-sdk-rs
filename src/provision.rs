@@ -90,6 +90,7 @@ pub async fn get_iothub_from_provision_service(
     device_key: &str,
     max_retries: i32,
 ) -> Result<String, Box<dyn std::error::Error>> {
+    use tokio_compat_02::FutureExt;
     let expiry = Utc::now() + Duration::days(1);
     let expiry = expiry.timestamp();
     let sas = generate_registration_sas(scope_id, device_id, device_key, expiry);
@@ -117,7 +118,7 @@ pub async fn get_iothub_from_provision_service(
     );
     let https = HttpsConnector::new();
     let client = Client::builder().build::<_, hyper::Body>(https);
-    let res = client.request(req).await?;
+    let res = client.request(req).compat().await?;
     if res.status() != StatusCode::ACCEPTED {
         let body = hyper::body::to_bytes(res).await.unwrap();
         error!("Rejection {:#?}", body);
@@ -147,7 +148,7 @@ pub async fn get_iothub_from_provision_service(
             .header(header::CONTENT_TYPE, "application/json")
             .header(header::AUTHORIZATION, sas.clone())
             .body(Body::empty())?;
-        let res = client.request(req).await?;
+        let res = client.request(req).compat().await?;
         if res.status() == StatusCode::OK {
             let body = hyper::body::to_bytes(res).await.unwrap();
             let reply: serde_json::Map<String, serde_json::Value> =
@@ -181,13 +182,9 @@ where
     /// Note that this uses the default Azure device provisioning
     /// service, which may be blocked in some countries.
     ///
-    /// Warning!  Because currently `hyper` does not use Futures 0.3, you will
-    /// need the `compat` call in or things will fail mysteriously.
-    ///
     /// # Example
     /// ```no_run
     /// use azure_iot_sdk::{IoTHubClient, MqttTransport};
-    /// use tokio_compat_02::FutureExt;
     ///
     /// #[tokio::main]
     /// async fn main() {
@@ -195,7 +192,7 @@ where
     ///           "ScopeID",
     ///           "DeviceID".into(),
     ///           "DeviceKey",
-    ///           4).compat().await;
+    ///           4).await;
     /// }
     /// ```
     #[cfg(feature = "with-provision")]
@@ -205,8 +202,12 @@ where
         device_key: &str,
         max_retries: i32,
     ) -> Result<IoTHubClient<TR>, Box<dyn std::error::Error>> {
+        use tokio_compat_02::FutureExt;
+        // Note - the call to .compat() can be removed in the future when hyper is
+        // tokio 0.3 compliant.
         let hubname =
-            get_iothub_from_provision_service(scope_id, &device_id, device_key, max_retries).await?;
+            get_iothub_from_provision_service(scope_id, &device_id, device_key, max_retries)
+                .await?;
 
         let token_source = DeviceKeyTokenSource::new(&hubname, &device_id, device_key).unwrap();
         let client = IoTHubClient::new(&hubname, device_id, token_source).await?;
