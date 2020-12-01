@@ -45,7 +45,7 @@ checksum = "cdb031dd78e28731d87d56cc8ffef4a8f36ca26c38fe2de700543e627f8a464a"
 
 [[package]]
 name = "azure_iot_sdk"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "async-trait",
  "base64",
@@ -68,6 +68,7 @@ dependencies = [
  "serde_urlencoded",
  "sha2",
  "tokio 0.3.0",
+ "tokio-compat-02",
  "tokio-native-tls",
 ]
 
@@ -1182,6 +1183,7 @@ dependencies = [
  "lazy_static",
  "memchr",
  "mio 0.6.22",
+ "num_cpus",
  "pin-project-lite",
  "slab",
 ]
@@ -1194,6 +1196,7 @@ checksum = "7137dbb0abee577362ccdc7df21605cfcbb949243aeab47dac9ea6ef7d830e21"
 dependencies = [
  "bytes",
  "fnv",
+ "futures-core",
  "lazy_static",
  "libc",
  "memchr",
@@ -1202,6 +1205,19 @@ dependencies = [
  "pin-project-lite",
  "slab",
  "tokio-macros",
+]
+
+[[package]]
+name = "tokio-compat-02"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bb4cec419b8b6f06c32e74aae6d8c5e79646d038a38e5ea2b36045f2c3296e22"
+dependencies = [
+ "bytes",
+ "once_cell",
+ "pin-project-lite",
+ "tokio 0.2.22",
+ "tokio 0.3.0",
 ]
 
 [[package]]

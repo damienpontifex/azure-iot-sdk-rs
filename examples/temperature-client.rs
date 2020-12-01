@@ -90,9 +90,12 @@ async fn main() -> azure_iot_sdk::Result<()> {
     )
     .unwrap();
 
-    let mut client =
-        IoTHubClient::<MqttTransport>::new(&config.hostname, &config.device_id, token_source)
-            .await?;
+    let mut client = IoTHubClient::<MqttTransport>::new(
+        &config.hostname,
+        config.device_id.clone(),
+        token_source,
+    )
+    .await?;
 
     info!("Initialized client");
 
@@ -111,7 +114,8 @@ async fn main() -> azure_iot_sdk::Result<()> {
                                 0,
                                 Some(std::str::from_utf8(&msg.message.body).unwrap().to_string()),
                             ))
-                            .await;
+                            .await
+                            .unwrap();
                     }
                     MessageType::DesiredPropertyUpdate(msg) => {
                         info!("Desired properties updated {:?}", msg)

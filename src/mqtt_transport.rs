@@ -147,7 +147,7 @@ pub struct MqttTransport {
 impl Transport<MqttTransport> for MqttTransport {
     async fn new<TS>(
         hub_name: &str,
-        device_id: &str,
+        device_id: String,
         token_source: TS,
     ) -> crate::Result<MqttTransport>
     where
@@ -160,7 +160,7 @@ impl Transport<MqttTransport> for MqttTransport {
         let token = token_source.get(&expiry);
         trace!("Using token {}", token);
 
-        Self::new_with_username_password(hub_name, &user_name, &token, device_id).await
+        Self::new_with_username_password(hub_name, &user_name, &token, &device_id).await
     }
 
     async fn send_message(&mut self, message: Message) -> crate::Result<()> {
@@ -171,12 +171,16 @@ impl Transport<MqttTransport> for MqttTransport {
         let mut buf = Vec::new();
         publish_packet.encode(&mut buf).unwrap();
 
-        self.write_socket.lock().await.write_all(&buf[..]).await?;
-        Ok(())
+        self.write_socket
+            .lock()
+            .await
+            .write_all(&buf[..])
+            .await
+            .map_err(|e| e.into())
     }
 
     #[cfg(feature = "twin-properties")]
-    async fn send_property_update(&mut self, request_id: &str, body: &str) {
+    async fn send_property_update(&mut self, request_id: &str, body: &str) -> crate::Result<()> {
         trace!("Publishing twin properties with rid = {}", request_id);
         let packet = PublishPacket::new(
             TopicName::new(twin_update_topic(&request_id)).unwrap(),
@@ -190,11 +194,11 @@ impl Transport<MqttTransport> for MqttTransport {
             .await
             .write_all(&buf[..])
             .await
-            .unwrap();
+            .map_err(|e| e.into())
     }
 
     #[cfg(feature = "twin-properties")]
-    async fn request_twin_properties(&mut self, request_id: &str) {
+    async fn request_twin_properties(&mut self, request_id: &str) -> crate::Result<()> {
         trace!(
             "Requesting device twin properties with rid = {}",
             request_id
@@ -211,11 +215,14 @@ impl Transport<MqttTransport> for MqttTransport {
             .await
             .write_all(&buf[..])
             .await
-            .unwrap();
+            .map_err(|e| e.into())
     }
 
     #[cfg(feature = "direct-methods")]
-    async fn respond_to_direct_method(&mut self, response: DirectMethodResponse) {
+    async fn respond_to_direct_method(
+        &mut self,
+        response: DirectMethodResponse,
+    ) -> crate::Result<()> {
         // TODO: Append properties and system properties to topic path
         trace!(
             "Responding to direct method with rid = {}",
@@ -233,10 +240,10 @@ impl Transport<MqttTransport> for MqttTransport {
             .await
             .write_all(&buf[..])
             .await
-            .unwrap();
+            .map_err(|e| e.into())
     }
 
-    async fn ping(&mut self) {
+    async fn ping(&mut self) -> crate::Result<()> {
         info!("Sending PINGREQ to broker");
 
         let pingreq_packet = PingreqPacket::new();
@@ -248,7 +255,7 @@ impl Transport<MqttTransport> for MqttTransport {
             .await
             .write_all(&buf)
             .await
-            .unwrap();
+            .map_err(|e| e.into())
     }
 
     #[cfg(any(
@@ -379,7 +386,7 @@ impl Transport<MqttTransport> for MqttTransport {
 
         // Send empty message so hub will respond with device twin data
         #[cfg(feature = "twin-properties")]
-        self.request_twin_properties("0").await;
+        self.request_twin_properties("0").await.unwrap();
 
         // let (abort_handle, abort_registration) = AbortHandle::new_pair();
         // let _ = Abortable::new(handle, abort_registration);
@@ -517,12 +524,8 @@ impl MqttTransport {
         let unsubscribe_packet = UnsubscribePacket::new(10, topics);
         let mut buf = Vec::new();
         unsubscribe_packet.encode(&mut buf).unwrap();
-        self.write_socket
-            .lock()
-            .await
-            .write_all(&buf[..])
-            .await
-            .unwrap();
+        // If the connection is lost, do not unwrap.
+        let _ = self.write_socket.lock().await.write_all(&buf[..]).await;
     }
 }
 

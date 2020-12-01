@@ -20,7 +20,7 @@ use tokio::sync::mpsc::Receiver;
 #[async_trait]
 pub trait Transport<T> {
     ///
-    async fn new<TS>(hub_name: &str, device_id: &str, token_source: TS) -> crate::Result<T>
+    async fn new<TS>(hub_name: &str, device_id: String, token_source: TS) -> crate::Result<T>
     where
         TS: TokenSource + Sync + Send;
 
@@ -28,18 +28,21 @@ pub trait Transport<T> {
     async fn send_message(&mut self, message: Message) -> crate::Result<()>;
     ///
     #[cfg(feature = "twin-properties")]
-    async fn send_property_update(&mut self, request_id: &str, body: &str);
+    async fn send_property_update(&mut self, request_id: &str, body: &str) -> crate::Result<()>;
 
     ///
     #[cfg(feature = "twin-properties")]
-    async fn request_twin_properties(&mut self, request_id: &str);
+    async fn request_twin_properties(&mut self, request_id: &str) -> crate::Result<()>;
 
     ///
     #[cfg(feature = "direct-methods")]
-    async fn respond_to_direct_method(&mut self, response: DirectMethodResponse);
+    async fn respond_to_direct_method(
+        &mut self,
+        response: DirectMethodResponse,
+    ) -> crate::Result<()>;
 
     ///
-    async fn ping(&mut self);
+    async fn ping(&mut self) -> crate::Result<()>;
 
     ///
     #[cfg(any(

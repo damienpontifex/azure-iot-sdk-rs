@@ -17,15 +17,15 @@ use tokio::sync::mpsc::Receiver;
 
 /// Client for communicating with IoT hub
 #[derive(Debug, Clone)]
-pub struct IoTHubClient<'a, TR>
+pub struct IoTHubClient<TR>
 where
     TR: Transport<TR>,
 {
-    device_id: &'a str,
+    device_id: String,
     transport: TR,
 }
 
-impl<'a, TR> IoTHubClient<'a, TR>
+impl<TR> IoTHubClient<TR>
 where
     TR: Transport<TR>,
 {
@@ -52,18 +52,18 @@ where
     ///     ).unwrap();
     ///
     ///     let mut client =
-    ///         IoTHubClient::<MqttTransport>::new(iothub_hostname, device_id, token_source).await;
+    ///         IoTHubClient::<MqttTransport>::new(iothub_hostname, device_id.into(), token_source).await;
     /// }
     /// ```
     pub async fn new<TS>(
         hub_name: &str,
-        device_id: &'a str,
+        device_id: String,
         token_source: TS,
-    ) -> crate::Result<IoTHubClient<'a, TR>>
+    ) -> crate::Result<IoTHubClient<TR>>
     where
         TS: TokenSource + Sync + Send,
     {
-        let transport = TR::new(hub_name, device_id, token_source).await?;
+        let transport = TR::new(hub_name, device_id.clone(), token_source).await?;
         //         #[cfg(not(any(feature = "http-transport", feature = "amqp-transport")))]
         //         let transport = MqttTransport::new(hub_name, device_id, token_source).await;
         //
@@ -113,12 +113,12 @@ where
     ///         IoTHubClient::<MqttTransport>::new_with_transport(transport, device_id).await;
     /// }
     /// ```
-    pub async fn new_with_transport(
+    pub async fn new_with_transport<S: ToString>(
         transport: TR,
-        device_id: &'a str,
-    ) -> crate::Result<IoTHubClient<'a, TR>> {
+        device_id: S,
+    ) -> crate::Result<IoTHubClient<TR>> {
         Ok(Self {
-            device_id,
+            device_id: device_id.to_string(),
             transport,
         })
     }
@@ -141,7 +141,7 @@ where
     ///     ).unwrap();
     ///
     ///     let mut client =
-    ///         IoTHubClient::<MqttTransport>::new(iothub_hostname, device_id, token_source).await?;
+    ///         IoTHubClient::<MqttTransport>::new(iothub_hostname, device_id.into(), token_source).await?;
     ///
     ///     let mut interval = time::interval(time::Duration::from_secs(1));
     ///     let mut count: u32 = 0;
@@ -192,12 +192,16 @@ where
     /// ```ignore
     ///    let my_struct = MyProperties {property_1 : 31.0, property_2: 42.0};
     ///    let body = serde_json::to_string(&my_struct).unwrap();
-    ///    client.send_property_update(&format!("{}", update_counter), &body).await;
+    ///    client.send_property_update(&format!("{}", update_counter), &body).await.unwrap();
     ///    update_counter += 1;
     /// ```
     #[cfg(feature = "twin-properties")]
-    pub async fn send_property_update(&mut self, request_id: &str, body: &str) {
-        self.transport.send_property_update(request_id, body).await;
+    pub async fn send_property_update(
+        &mut self,
+        request_id: &str,
+        body: &str,
+    ) -> crate::Result<()> {
+        self.transport.send_property_update(request_id, body).await
     }
 
     ///
@@ -212,12 +216,15 @@ where
 
     ///
     #[cfg(feature = "direct-methods")]
-    pub async fn respond_to_direct_method(&mut self, response: DirectMethodResponse) {
+    pub async fn respond_to_direct_method(
+        &mut self,
+        response: DirectMethodResponse,
+    ) -> crate::Result<()> {
         self.transport.respond_to_direct_method(response).await
     }
 
     ///
-    pub async fn ping(&mut self) {
+    pub async fn ping(&mut self) -> crate::Result<()> {
         self.transport.ping().await
     }
 }
