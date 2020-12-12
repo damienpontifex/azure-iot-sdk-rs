@@ -36,7 +36,7 @@ impl IoTHubClient {
     ///
     /// # Example
     /// ```no_run
-    /// use azure_iot_sdk::{IoTHubClient, DeviceKeyTokenSource, MqttTransport};
+    /// use azure_iot_sdk::{IoTHubClient, DeviceKeyTokenSource};
     ///
     /// #[tokio::main]
     /// async fn main() {
@@ -78,7 +78,7 @@ impl IoTHubClient {
     /// # Example
     /// ```no_run
     /// use tokio::time;
-    /// use azure_iot_sdk::{IoTHubClient, DeviceKeyTokenSource, MqttTransport, Message};
+    /// use azure_iot_sdk::{IoTHubClient, DeviceKeyTokenSource, Message};
     ///
     /// #[tokio::main]
     /// async fn main() -> azure_iot_sdk::Result<()> {

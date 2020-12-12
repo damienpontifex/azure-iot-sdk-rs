@@ -180,7 +180,7 @@ impl IoTHubClient {
     ///
     /// # Example
     /// ```no_run
-    /// use azure_iot_sdk::{IoTHubClient, MqttTransport};
+    /// use azure_iot_sdk::IoTHubClient;
     ///
     /// #[tokio::main]
     /// async fn main() {
