@@ -63,7 +63,7 @@ jobs:
       if: github.event_name == 'pull_request'
       with:
         command: test
-        args: --release --test '*'
+        args: "--release --test '*'"
 
     - name: Annotate commit with clippy warnings
       uses: actions-rs/clippy-check@v1
