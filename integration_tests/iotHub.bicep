@@ -12,4 +12,3 @@ resource iothub 'Microsoft.Devices/IotHubs@2020-03-01' = {
   }
   properties: {}
 }
-
