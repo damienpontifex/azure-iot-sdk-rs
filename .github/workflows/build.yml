@@ -28,11 +28,17 @@ jobs:
         command: build
         args: --release --all-features
 
-    - name: Test
+    - name: lib Tests
       uses: actions-rs/cargo@v1
       with:
         command: test
-        args: --release --all-features
+        args: --lib --release --verbose --all-features
+
+    - name: doc Tests
+      uses: actions-rs/cargo@v1
+      with:
+        command: test
+        args: --doc --release --verbose --all-features
 
     - name: Lookup PR device details
       uses: azure/CLI@v1
@@ -56,7 +62,7 @@ jobs:
       if: github.event_name != 'pull_request'
       with:
         command: test
-        args: --verbose --test '*'
+        args: --verbose --release --test '*'
 
     - name: Annotate commit with clippy warnings
       uses: actions-rs/clippy-check@v1
