@@ -29,16 +29,10 @@ jobs:
         args: --release --all-features
 
     - name: lib Tests
-      uses: actions-rs/cargo@v1
-      with:
-        command: test
-        args: --lib --release --all-features
+      run: test --lib --release --all-features
 
     - name: doc Tests
-      uses: actions-rs/cargo@v1
-      with:
-        command: test
-        args: --doc --release --all-features
+      run: test --doc --release --all-features
 
     - name: Lookup PR device details
       uses: azure/CLI@v1
@@ -59,11 +53,8 @@ jobs:
           echo "IOT_DEVICE_ACCESS_KEY=${PRIMARY_KEY}" >> $GITHUB_ENV
 
     - name: Integration tests
-      uses: actions-rs/cargo@v1
       if: github.event_name == 'pull_request'
-      with:
-        command: test
-        args: "--release --test '*'"
+      run: test --release --test ''*''
 
     - name: Annotate commit with clippy warnings
       uses: actions-rs/clippy-check@v1
