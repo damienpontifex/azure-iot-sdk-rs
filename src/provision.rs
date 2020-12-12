@@ -6,7 +6,6 @@ use serde::export::Formatter;
 use crate::{
     client::IoTHubClient,
     token::{generate_token, DeviceKeyTokenSource},
-    transport::Transport,
 };
 
 const DPS_HOST: &str = "https://global.azure-devices-provisioning.net";
@@ -166,10 +165,7 @@ pub async fn get_iothub_from_provision_service(
     Ok(hubname)
 }
 
-impl<TR> IoTHubClient<TR>
-where
-    TR: Transport<TR>,
-{
+impl IoTHubClient {
     /// Create a new IoT Hub device client using the device provisioning service
     ///
     /// # Arguments
@@ -184,11 +180,11 @@ where
     ///
     /// # Example
     /// ```no_run
-    /// use azure_iot_sdk::{IoTHubClient, MqttTransport};
+    /// use azure_iot_sdk::IoTHubClient;
     ///
     /// #[tokio::main]
     /// async fn main() {
-    ///     let mut client = IoTHubClient::<MqttTransport>::from_provision_service(
+    ///     let mut client = IoTHubClient::from_provision_service(
     ///           "ScopeID",
     ///           "DeviceID".into(),
     ///           "DeviceKey",
@@ -201,7 +197,7 @@ where
         device_id: String,
         device_key: &str,
         max_retries: i32,
-    ) -> Result<IoTHubClient<TR>, Box<dyn std::error::Error>> {
+    ) -> Result<IoTHubClient, Box<dyn std::error::Error>> {
         use tokio_compat_02::FutureExt;
         // Note - the call to .compat() can be removed in the future when hyper is
         // tokio 0.3 compliant.

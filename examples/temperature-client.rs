@@ -2,7 +2,7 @@
 extern crate log;
 
 use azure_iot_sdk::{
-    DeviceKeyTokenSource, DirectMethodResponse, IoTHubClient, Message, MessageType, MqttTransport,
+    DeviceKeyTokenSource, DirectMethodResponse, IoTHubClient, Message, MessageType,
 };
 
 use chrono::{DateTime, Utc};
@@ -90,12 +90,8 @@ async fn main() -> azure_iot_sdk::Result<()> {
     )
     .unwrap();
 
-    let mut client = IoTHubClient::<MqttTransport>::new(
-        &config.hostname,
-        config.device_id.clone(),
-        token_source,
-    )
-    .await?;
+    let mut client =
+        IoTHubClient::new(&config.hostname, config.device_id.clone(), token_source).await?;
 
     info!("Initialized client");
 
