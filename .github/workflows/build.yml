@@ -34,6 +34,30 @@ jobs:
         command: test
         args: --release --all-features
 
+    - name: Lookup PR device details
+      uses: azure/CLI@v1
+      with:
+        inlineScript: |
+          az extension add --name azure-iot
+
+          PRIMARY_KEY=$(az iot hub device-identity show \
+            --device-id pr-${{ github.event.number }} \
+            --hub-name azure-iot-sdk-rs \
+            --resource-group azure-iot-sdk-rs \
+            --login "${{ secrets.IOTHUB_ENTITY_CONNECTION_STRING }}" \
+            --output json | jq --raw-output '.authentication.symmetricKey.primaryKey')
+
+          # Set these environment variables needed for integration test
+          echo "IOT_DEVICE_ID=pr-${{ github.event.number }}" >> $GITHUB_ENV
+          echo "IOT_DEVICE_ACCESS_KEY=${PRIMARY_KEY}" >> $GITHUB_ENV
+
+    - name: Integration tests
+      uses: actions-rs/cargo@v1
+      if: github.event_name != 'pull_request'
+      with:
+        command: test
+        args: --verbose --test '*'
+
     - name: Annotate commit with clippy warnings
       uses: actions-rs/clippy-check@v1
       with:
