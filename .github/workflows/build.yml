@@ -23,16 +23,13 @@ jobs:
         components: rustfmt, clippy
 
     - name: Release build
-      uses: actions-rs/cargo@v1
-      with:
-        command: build
-        args: --release --all-features
+      run: cargo build --release --all-features
 
     - name: lib Tests
-      run: test --lib --release --all-features
+      run: cargo test --lib --release --all-features
 
     - name: doc Tests
-      run: test --doc --release --all-features
+      run: cargo test --doc --release --all-features
 
     - name: Lookup PR device details
       uses: azure/CLI@v1
@@ -54,7 +51,7 @@ jobs:
 
     - name: Integration tests
       if: github.event_name == 'pull_request'
-      run: test --release --test ''*''
+      run: cargo test --release --test ''*''
 
     - name: Annotate commit with clippy warnings
       uses: actions-rs/clippy-check@v1
