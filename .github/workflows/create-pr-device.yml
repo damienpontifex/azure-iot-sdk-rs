@@ -1,0 +1,24 @@
+name: Create device for PR
+
+on:
+  pull_request:
+    branches:
+      - master
+    # types:
+    # - created
+
+jobs:
+  create-iot-hub-device:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Azure CLI script
+      uses: azure/CLI@v1
+      with:
+        azcliversion: 2.0.72
+        inlineScript: |
+          az iot hub device-identity create \
+            --device-id pr-${{ github.event.number }} \
+            --am shared_private_key \
+            --hub-name azure-iot-sdk-rs \
+            --resource-group azure-iot-sdk-rs \
+            --login ${{ secrets.IOTHUB_ENTITY_CONNECTION_STRING }}
