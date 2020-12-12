@@ -16,7 +16,7 @@ direct-methods = []
 twin-properties = []
 c2d-messages = []
 error-handling-messages = []
-http-transport = ["hyper", "hyper-tls", "tokio-compat-02"]
+# http-transport = ["hyper", "hyper-tls", "tokio-compat-02"]
 with-provision = ["hyper", "hyper-tls", "tokio-compat-02"]
 
 [dependencies]

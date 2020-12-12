@@ -123,6 +123,20 @@ impl<'a> TokenSource for DeviceKeyTokenSource<'_> {
     }
 }
 
+/// Useful if you need to customize the user name and password sent to Azure (for example
+/// to implement an IoT Plug-n-Play device))
+#[derive(Debug, Clone)]
+pub struct UsernamePasswordTokenSource {
+    username: String,
+    password: String,
+}
+
+impl TokenSource for UsernamePasswordTokenSource {
+    fn get(&self, _expiry: &DateTime<Utc>) -> String {
+        self.password.clone()
+    }
+}
+
 pub(crate) fn generate_token(key: &str, message: &str) -> String {
     // Checked base64 and hmac in new so should be safe to unwrap here
     let key = base64::decode(&key).unwrap();

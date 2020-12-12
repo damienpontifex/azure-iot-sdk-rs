@@ -37,7 +37,7 @@
 //!     ).unwrap();
 //!
 //!     let mut client =
-//!         IoTHubClient::<MqttTransport>::new(iothub_hostname, device_id.into(), token_source).await?;
+//!         IoTHubClient::new(iothub_hostname, device_id.into(), token_source).await?;
 //!
 //!     let mut interval = time::interval(time::Duration::from_secs(1));
 //!     let mut count: u32 = 0;
@@ -71,16 +71,14 @@ pub const SDK_VERSION: &str = std::env!("CARGO_PKG_VERSION");
 pub mod client;
 pub use client::*;
 
-#[cfg(feature = "http-transport")]
-pub(crate) mod http_transport;
+// #[cfg(feature = "http-transport")]
+// pub(crate) mod http_transport;
 /// Message types for communicating with the IoT Hub
 pub mod message;
 pub use message::*;
 ///
-// #[cfg(not(any(feature = "http-transport", feature = "amqp-transport")))]
-pub mod mqtt_transport;
-// #[cfg(not(any(feature = "http-transport", feature = "amqp-transport")))]
-pub use mqtt_transport::*;
+#[cfg(not(feature = "http-transport"))]
+pub(crate) mod mqtt_transport;
 ///
 pub mod token;
 pub use token::*;

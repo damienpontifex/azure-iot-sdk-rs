@@ -15,20 +15,17 @@ use crate::{token::TokenSource, transport::Transport};
 ))]
 use tokio::sync::mpsc::Receiver;
 
+#[cfg(not(feature = "http-transport"))]
+pub(crate) type ClientTransport = crate::mqtt_transport::MqttTransport;
+
 /// Client for communicating with IoT hub
 #[derive(Debug, Clone)]
-pub struct IoTHubClient<TR>
-where
-    TR: Transport<TR>,
-{
+pub struct IoTHubClient {
     device_id: String,
-    transport: TR,
+    transport: ClientTransport,
 }
 
-impl<TR> IoTHubClient<TR>
-where
-    TR: Transport<TR>,
-{
+impl IoTHubClient {
     /// Create a new IoT Hub device client using a shared access signature
     ///
     /// # Arguments
@@ -52,18 +49,18 @@ where
     ///     ).unwrap();
     ///
     ///     let mut client =
-    ///         IoTHubClient::<MqttTransport>::new(iothub_hostname, device_id.into(), token_source).await;
+    ///         IoTHubClient::new(iothub_hostname, device_id.into(), token_source).await;
     /// }
     /// ```
     pub async fn new<TS>(
         hub_name: &str,
         device_id: String,
         token_source: TS,
-    ) -> crate::Result<IoTHubClient<TR>>
+    ) -> crate::Result<IoTHubClient>
     where
         TS: TokenSource + Sync + Send,
     {
-        let transport = TR::new(hub_name, device_id.clone(), token_source).await?;
+        let transport = ClientTransport::new(hub_name, device_id.clone(), token_source).await?;
         //         #[cfg(not(any(feature = "http-transport", feature = "amqp-transport")))]
         //         let transport = MqttTransport::new(hub_name, device_id, token_source).await;
         //
@@ -72,53 +69,6 @@ where
 
         Ok(Self {
             device_id,
-            transport,
-        })
-    }
-
-    /// Create a new IoT Hub device client using a preconfigured transport.  This is useful
-    /// if you need to customize the user name and password sent to Azure (for example to
-    /// implement an IoT Plug-n-Play device).
-    ///
-    /// # Arguments
-    ///
-    /// * `transport` - The transport to use for this client
-    /// * `device_id` - The registered device to connect as
-    ///
-    /// # Example
-    /// ```no_run
-    /// use azure_iot_sdk::{IoTHubClient, DeviceKeyTokenSource, MqttTransport};
-    /// use chrono::{Duration, Utc};
-    /// use azure_iot_sdk::TokenSource;
-    ///
-    /// #[tokio::main]
-    /// async fn main() {
-    ///     let iothub_hostname = "iothubname.azure-devices.net";
-    ///     let device_id = "MyDeviceId";
-    ///     let token_source = DeviceKeyTokenSource::new(
-    ///         iothub_hostname,
-    ///         device_id,
-    ///         "TheAccessKey",
-    ///     ).unwrap();
-    ///     let product_info = "model-id=dtmi:com:example:Thermostat;1";
-    ///     let user_name = format!("{}/{}/?api-version=2020-09-30&{}",iothub_hostname,
-    ///                             device_id, product_info);
-    ///     let expiry = Utc::now() + Duration::days(1);
-    ///     let password = token_source.get(&expiry);
-    ///     let transport = MqttTransport::new_with_username_password(iothub_hostname,
-    ///                                                               &user_name,
-    ///                                                               &password,
-    ///                                                               device_id).await.unwrap();
-    ///     let mut client =
-    ///         IoTHubClient::<MqttTransport>::new_with_transport(transport, device_id).await;
-    /// }
-    /// ```
-    pub async fn new_with_transport<S: ToString>(
-        transport: TR,
-        device_id: S,
-    ) -> crate::Result<IoTHubClient<TR>> {
-        Ok(Self {
-            device_id: device_id.to_string(),
             transport,
         })
     }
@@ -141,7 +91,7 @@ where
     ///     ).unwrap();
     ///
     ///     let mut client =
-    ///         IoTHubClient::<MqttTransport>::new(iothub_hostname, device_id.into(), token_source).await?;
+    ///         IoTHubClient::new(iothub_hostname, device_id.into(), token_source).await?;
     ///
     ///     let mut interval = time::interval(time::Duration::from_secs(1));
     ///     let mut count: u32 = 0;

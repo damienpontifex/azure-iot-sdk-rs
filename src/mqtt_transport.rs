@@ -126,7 +126,7 @@ async fn tcp_connect(iot_hub: &str) -> crate::Result<TlsStream<TcpStream>> {
 
 ///
 #[derive(Debug, Clone)]
-pub struct MqttTransport {
+pub(crate) struct MqttTransport {
     write_socket: Arc<Mutex<WriteHalf<TlsStream<TcpStream>>>>,
     read_socket: Arc<Mutex<ReadHalf<TlsStream<TcpStream>>>>,
     d2c_topic: TopicName,
