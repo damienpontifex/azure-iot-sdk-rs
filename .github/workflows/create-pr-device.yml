@@ -15,6 +15,8 @@ jobs:
       uses: azure/CLI@v1
       with:
         inlineScript: |
+          az extension add --name azure-iot
+
           az iot hub device-identity create \
             --device-id pr-${{ github.event.number }} \
             --am shared_private_key \
