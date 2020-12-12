@@ -32,16 +32,17 @@ jobs:
       uses: actions-rs/cargo@v1
       with:
         command: test
-        args: --lib --release --verbose --all-features
+        args: --lib --release --all-features
 
     - name: doc Tests
       uses: actions-rs/cargo@v1
       with:
         command: test
-        args: --doc --release --verbose --all-features
+        args: --doc --release --all-features
 
     - name: Lookup PR device details
       uses: azure/CLI@v1
+      if: github.event_name == 'pull_request'
       with:
         inlineScript: |
           az extension add --name azure-iot
@@ -59,10 +60,10 @@ jobs:
 
     - name: Integration tests
       uses: actions-rs/cargo@v1
-      if: github.event_name != 'pull_request'
+      if: github.event_name == 'pull_request'
       with:
         command: test
-        args: --verbose --release --test '*'
+        args: --release --test '*'
 
     - name: Annotate commit with clippy warnings
       uses: actions-rs/clippy-check@v1
