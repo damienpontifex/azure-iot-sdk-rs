@@ -61,11 +61,6 @@ impl IoTHubClient {
         TS: TokenSource + Sync + Send,
     {
         let transport = ClientTransport::new(hub_name, device_id.clone(), token_source).await?;
-        //         #[cfg(not(any(feature = "http-transport", feature = "amqp-transport")))]
-        //         let transport = MqttTransport::new(hub_name, device_id, token_source).await;
-        //
-        //         #[cfg(feature = "http-transport")]
-        //         let transport = HttpTransport::new(hub_name, device_id, token_source).await;
 
         Ok(Self {
             device_id,
