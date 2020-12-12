@@ -52,7 +52,7 @@ jobs:
     - name: Integration tests
       if: github.event_name == 'pull_request'
       run: |
-        cargo test --release --test '*'
+        cargo test --release --test ''*''
 
     - name: Annotate commit with clippy warnings
       uses: actions-rs/clippy-check@v1
