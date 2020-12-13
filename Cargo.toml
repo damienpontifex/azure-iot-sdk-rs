@@ -48,6 +48,7 @@ config = "0.10"
 dotenv = "0.15"
 serde_json = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
+iothub = { git = "https://github.com/Azure/azure-sdk-for-rust" }
 
 [[example]]
 name = "send-message"
