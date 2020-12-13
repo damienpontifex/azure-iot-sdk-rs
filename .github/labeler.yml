@@ -4,6 +4,9 @@ workflows:
 examples:
 - examples/**/*
 
+tests:
+- tests/**/*
+
 client:
 - src/**/*
 
