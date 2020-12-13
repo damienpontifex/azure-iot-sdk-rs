@@ -18,7 +18,7 @@ jobs:
         inlineScript: |
           az extension add --name azure-iot
 
-          az iot hub device-identity create \
+          az iot hub device-identity delete \
             --device-id pr-${{ github.event.number }} \
             --hub-name azure-iot-sdk-rs \
             --resource-group azure-iot-sdk-rs \
