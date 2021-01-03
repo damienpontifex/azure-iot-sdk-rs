@@ -24,3 +24,6 @@ module iotHub './iotHub.bicep' = {
     tags: tags
   }
 }
+
+resource asdf 'Microsoft.Network/ApplicationGatewayWebApplicationFirewallPolicies@2018-12-01' = {
+}
