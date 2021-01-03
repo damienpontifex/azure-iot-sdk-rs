@@ -11,7 +11,7 @@ use mqtt::TopicName;
 use mqtt::{QualityOfService, TopicFilter};
 use tokio::io::{ReadHalf, WriteHalf};
 use tokio::net::TcpStream;
-use tokio::prelude::*;
+use tokio::io::AsyncWriteExt;
 #[cfg(any(
     feature = "direct-methods",
     feature = "c2d-messages",
@@ -418,7 +418,7 @@ impl MqttTransport {
     ) -> crate::Result<MqttTransport> {
         let mut socket = tcp_connect(&hub_name).await?;
 
-        let mut conn = ConnectPacket::new("MQTT", device_id);
+        let mut conn = ConnectPacket::new(device_id);
         conn.set_client_identifier(device_id);
         conn.set_clean_session(false);
         conn.set_keep_alive(KEEP_ALIVE);

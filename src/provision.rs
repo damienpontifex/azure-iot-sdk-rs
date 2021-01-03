@@ -89,7 +89,6 @@ pub async fn get_iothub_from_provision_service(
     device_key: &str,
     max_retries: i32,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    use tokio_compat_02::FutureExt;
     let expiry = Utc::now() + Duration::days(1);
     let expiry = expiry.timestamp();
     let sas = generate_registration_sas(scope_id, device_id, device_key, expiry);
@@ -117,7 +116,7 @@ pub async fn get_iothub_from_provision_service(
     );
     let https = HttpsConnector::new();
     let client = Client::builder().build::<_, hyper::Body>(https);
-    let res = client.request(req).compat().await?;
+    let res = client.request(req).await?;
     if res.status() != StatusCode::ACCEPTED {
         let body = hyper::body::to_bytes(res).await.unwrap();
         error!("Rejection {:#?}", body);
@@ -147,7 +146,7 @@ pub async fn get_iothub_from_provision_service(
             .header(header::CONTENT_TYPE, "application/json")
             .header(header::AUTHORIZATION, sas.clone())
             .body(Body::empty())?;
-        let res = client.request(req).compat().await?;
+        let res = client.request(req).await?;
         if res.status() == StatusCode::OK {
             let body = hyper::body::to_bytes(res).await.unwrap();
             let reply: serde_json::Map<String, serde_json::Value> =
@@ -198,9 +197,6 @@ impl IoTHubClient {
         device_key: &str,
         max_retries: i32,
     ) -> Result<IoTHubClient, Box<dyn std::error::Error>> {
-        use tokio_compat_02::FutureExt;
-        // Note - the call to .compat() can be removed in the future when hyper is
-        // tokio 0.3 compliant.
         let hubname =
             get_iothub_from_provision_service(scope_id, &device_id, device_key, max_retries)
                 .await?;
