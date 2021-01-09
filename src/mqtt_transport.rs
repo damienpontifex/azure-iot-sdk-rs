@@ -9,9 +9,9 @@ use mqtt::TopicName;
     feature = "twin-properties"
 ))]
 use mqtt::{QualityOfService, TopicFilter};
+use tokio::io::AsyncWriteExt;
 use tokio::io::{ReadHalf, WriteHalf};
 use tokio::net::TcpStream;
-use tokio::io::AsyncWriteExt;
 #[cfg(any(
     feature = "direct-methods",
     feature = "c2d-messages",
@@ -111,6 +111,50 @@ async fn tcp_connect(iot_hub: &str) -> crate::Result<TlsStream<TcpStream>> {
     let socket = cx.connect(&iot_hub, socket).await?;
 
     trace!("Connected tls context {:?}", cx);
+
+    Ok(socket)
+}
+
+pub(crate) async fn mqtt_connect(
+    iot_hub: &str,
+    device_id: &str,
+    username: impl ToString,
+    password: impl ToString,
+) -> crate::Result<TlsStream<TcpStream>> {
+    let mut socket = tcp_connect(iot_hub).await?;
+
+    let mut conn = ConnectPacket::new(device_id);
+    conn.set_client_identifier(device_id);
+    conn.set_clean_session(false);
+    conn.set_keep_alive(KEEP_ALIVE);
+    conn.set_user_name(Some(username.to_string()));
+    conn.set_password(Some(password.to_string()));
+
+    let mut buf = Vec::new();
+    conn.encode(&mut buf).unwrap();
+    socket.write_all(&buf[..]).await?;
+
+    let packet = VariablePacket::parse(&mut socket).await;
+
+    trace!("PACKET {:?}", packet);
+    match packet {
+        //TODO: Enum error type instead of strings
+        Ok(VariablePacket::ConnackPacket(connack)) => {
+            if connack.connect_return_code() != ConnectReturnCode::ConnectionAccepted {
+                Err(format!(
+                    "Failed to connect to server, return code {:?}",
+                    connack.connect_return_code()
+                ))
+            } else {
+                Ok(())
+            }
+        }
+        Ok(pck) => Err(format!(
+            "Unexpected packet received after connect {:?}",
+            pck
+        )),
+        Err(err) => Err(format!("Error decoding connack packet {:?}", err)),
+    }?;
 
     Ok(socket)
 }
@@ -416,40 +460,7 @@ impl MqttTransport {
         password: &str,
         device_id: &str,
     ) -> crate::Result<MqttTransport> {
-        let mut socket = tcp_connect(&hub_name).await?;
-
-        let mut conn = ConnectPacket::new(device_id);
-        conn.set_client_identifier(device_id);
-        conn.set_clean_session(false);
-        conn.set_keep_alive(KEEP_ALIVE);
-        conn.set_user_name(Some(username.to_string()));
-        conn.set_password(Some(password.to_string()));
-
-        let mut buf = Vec::new();
-        conn.encode(&mut buf).unwrap();
-        socket.write_all(&buf[..]).await?;
-
-        let packet = VariablePacket::parse(&mut socket).await;
-
-        trace!("PACKET {:?}", packet);
-        match packet {
-            //TODO: Enum error type instead of strings
-            Ok(VariablePacket::ConnackPacket(connack)) => {
-                if connack.connect_return_code() != ConnectReturnCode::ConnectionAccepted {
-                    Err(format!(
-                        "Failed to connect to server, return code {:?}",
-                        connack.connect_return_code()
-                    ))
-                } else {
-                    Ok(())
-                }
-            }
-            Ok(pck) => Err(format!(
-                "Unexpected packet received after connect {:?}",
-                pck
-            )),
-            Err(err) => Err(format!("Error decoding connack packet {:?}", err)),
-        }?;
+        let socket = mqtt_connect(hub_name, device_id, username, password).await?;
 
         let (read_socket, write_socket) = tokio::io::split(socket);
 
