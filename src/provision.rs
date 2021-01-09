@@ -122,6 +122,15 @@ pub async fn get_iothub_from_provision_service(
         error!("Rejection {:#?}", body);
         return Err(Box::new(ErrorKind::AzureProvisioningRejectedRequest));
     }
+
+    // Extract retry-after response header for delay duration or default to 3s
+    let retry_after = std::time::Duration::from_secs(res
+        .headers()
+        .get(header::RETRY_AFTER)
+        .and_then(|h| h.to_str().ok())
+        .and_then(|h| h.parse().ok())
+        .unwrap_or(3));
+
     let body = hyper::body::to_bytes(res).await.unwrap();
     let reply: serde_json::Map<String, serde_json::Value> = serde_json::from_slice(&body).unwrap();
     if !reply.contains_key("operationId") {
@@ -136,10 +145,10 @@ pub async fn get_iothub_from_provision_service(
         operation = operation,
         api = DPS_API_VERSION
     );
-    let mut retries: i32 = 0;
-    let mut hubname = String::new();
-    while retries < max_retries {
-        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+
+    for _ in 0..max_retries {
+        tokio::time::sleep(retry_after).await;
+
         let req = Request::builder()
             .method(Method::GET)
             .uri(&url)
@@ -153,15 +162,11 @@ pub async fn get_iothub_from_provision_service(
                 serde_json::from_slice(&body).unwrap();
             let registration_state = reply["registrationState"].as_object().unwrap();
             let hub = registration_state["assignedHub"].as_str().unwrap();
-            hubname = hub.to_string();
-            break;
+            return Ok(hub.to_string());
         }
-        retries += 1;
     }
-    if hubname.is_empty() {
-        return Err(Box::new(ErrorKind::FailedToGetIotHub));
-    }
-    Ok(hubname)
+
+    Err(Box::new(ErrorKind::FailedToGetIotHub))
 }
 
 impl IoTHubClient {
