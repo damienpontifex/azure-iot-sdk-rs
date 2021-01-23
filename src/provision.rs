@@ -1,7 +1,6 @@
 use chrono::{Duration, Utc};
 use hyper::{header, Body, Client, Method, Request, StatusCode};
 use hyper_tls::HttpsConnector;
-use serde::export::Formatter;
 
 use crate::{
     client::IoTHubClient,
@@ -49,7 +48,7 @@ pub enum ErrorKind {
 }
 
 impl std::fmt::Display for ErrorKind {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&format!("{:?}", self))
     }
 }
