@@ -174,6 +174,7 @@ pub(crate) struct MqttTransport {
     write_socket: Arc<Mutex<WriteHalf<TlsStream<TcpStream>>>>,
     read_socket: Arc<Mutex<ReadHalf<TlsStream<TcpStream>>>>,
     d2c_topic: TopicName,
+    device_id: String,
     #[cfg(feature = "c2d-messages")]
     rx_topic_prefix: String,
     // rx_loop_handle: Option<AbortHandle>,
@@ -468,6 +469,7 @@ impl MqttTransport {
             write_socket: Arc::new(Mutex::new(write_socket)),
             read_socket: Arc::new(Mutex::new(read_socket)),
             d2c_topic: TopicName::new(cloud_bound_messages_topic(&device_id)).unwrap(),
+            device_id: device_id.to_string(),
             #[cfg(feature = "c2d-messages")]
             rx_topic_prefix: device_bound_messages_topic_prefix(&device_id),
             // rx_loop_handle: None,
@@ -490,7 +492,7 @@ impl MqttTransport {
             ),
             #[cfg(feature = "c2d-messages")]
             (
-                TopicFilter::new(device_bound_messages_topic_filter("FirstDevice")).unwrap(),
+                TopicFilter::new(device_bound_messages_topic_filter(&self.device_id)).unwrap(),
                 QualityOfService::Level0,
             ),
             #[cfg(feature = "twin-properties")]
@@ -523,7 +525,7 @@ impl MqttTransport {
             #[cfg(feature = "direct-methods")]
             TopicFilter::new(METHOD_POST_TOPIC_FILTER).unwrap(),
             #[cfg(feature = "c2d-messages")]
-            TopicFilter::new(device_bound_messages_topic_filter("FirstDevice")).unwrap(),
+            TopicFilter::new(device_bound_messages_topic_filter(&self.device_id)).unwrap(),
             #[cfg(feature = "twin-properties")]
             TopicFilter::new(TWIN_RESPONSE_TOPIC_FILTER).unwrap(),
             #[cfg(feature = "twin-properties")]
