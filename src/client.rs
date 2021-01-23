@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{D2C, message::Message, transport::MqttTransport};
+use crate::{D2C, message::Message};
 #[cfg(feature = "direct-methods")]
 use crate::DirectMethodResponse;
 #[cfg(any(
@@ -9,7 +9,7 @@ use crate::DirectMethodResponse;
     feature = "twin-properties"
 ))]
 use crate::MessageType;
-use crate::{token::TokenSource, transport::Transport};
+use crate::{token::TokenSource};
 #[cfg(any(
     feature = "direct-methods",
     feature = "c2d-messages",
@@ -17,8 +17,8 @@ use crate::{token::TokenSource, transport::Transport};
 ))]
 use tokio::sync::mpsc::Receiver;
 
-#[cfg(not(feature = "http-transport"))]
-pub(crate) type ClientTransport = crate::transport::MqttTransport;
+//#[cfg(not(feature = "http-transport"))]
+//pub(crate) type ClientTransport = crate::transport::MqttTransport;
 
 /// Client for communicating with IoT hub
 #[derive(Debug, Clone)]
@@ -68,7 +68,7 @@ impl IoTHubClient {
 
         let (tx, rx) = tokio::sync::mpsc::channel(1024);
         let (tx1, rx1) = tokio::sync::mpsc::channel(1024);
-        let handle = crate::transport::init(hub_name.to_string(), device_id.clone(), token_source,
+        let handle = crate::transport::mqtt::init(hub_name.to_string(), device_id.clone(), token_source,
         rx, tx1).await.unwrap();
 
         Ok(Self {
