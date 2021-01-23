@@ -21,7 +21,7 @@ impl DeviceConfig {
 }
 
 #[tokio::main]
-async fn main() -> azure_iot_sdk::Result<()> {
+async fn main() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     let config = DeviceConfig::from_env().unwrap();
@@ -34,11 +34,13 @@ async fn main() -> azure_iot_sdk::Result<()> {
     .unwrap();
 
     let mut client =
-        IoTHubClient::new(&config.hostname, config.device_id.clone(), token_source).await?;
+        IoTHubClient::new(&config.hostname, config.device_id.clone(), token_source).await.unwrap();
 
     info!("Initialized client");
 
     let msg = Message::new(b"Hello, world!".to_vec());
 
-    client.send_message(msg).await
+    client.send_message(msg).await;
+
+    tokio::time::sleep(tokio::time::Duration::from_secs(10000)).await
 }

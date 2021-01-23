@@ -1,4 +1,6 @@
-use crate::message::Message;
+use std::sync::Arc;
+
+use crate::{D2C, message::Message, transport::MqttTransport};
 #[cfg(feature = "direct-methods")]
 use crate::DirectMethodResponse;
 #[cfg(any(
@@ -22,7 +24,9 @@ pub(crate) type ClientTransport = crate::transport::MqttTransport;
 #[derive(Debug, Clone)]
 pub struct IoTHubClient {
     device_id: String,
-    transport: ClientTransport,
+    // transport: ClientTransport,
+    transport_handle: Arc<tokio::task::JoinHandle<()>>,
+    d2c_sender: tokio::sync::mpsc::Sender<D2C>,
 }
 
 impl IoTHubClient {
@@ -58,13 +62,20 @@ impl IoTHubClient {
         token_source: TS,
     ) -> crate::Result<IoTHubClient>
     where
-        TS: TokenSource + Sync + Send,
+        TS: TokenSource,
     {
-        let transport = ClientTransport::new(hub_name, device_id.clone(), token_source).await?;
+        // let transport = ClientTransport::new(hub_name, device_id.clone(), token_source).await?;
+
+        let (tx, rx) = tokio::sync::mpsc::channel(1024);
+        let (tx1, rx1) = tokio::sync::mpsc::channel(1024);
+        let handle = crate::transport::init(hub_name.to_string(), device_id.clone(), token_source,
+        rx, tx1).await.unwrap();
 
         Ok(Self {
             device_id,
-            transport,
+            // transport,
+            transport_handle: Arc::new(handle),
+            d2c_sender: tx,
         })
     }
 
@@ -106,7 +117,9 @@ impl IoTHubClient {
     /// }
     /// ```
     pub async fn send_message(&mut self, message: Message) -> crate::Result<()> {
-        self.transport.send_message(message).await
+        // self.transport.send_message(message).await
+        self.d2c_sender.send(D2C::Telemetry(message)).await.unwrap();
+        Ok(())
     }
 
     /// Send a property update from the device to the cloud
@@ -146,7 +159,8 @@ impl IoTHubClient {
         request_id: &str,
         body: &str,
     ) -> crate::Result<()> {
-        self.transport.send_property_update(request_id, body).await
+        // self.transport.send_property_update(request_id, body).await
+        todo!()
     }
 
     ///
@@ -156,7 +170,8 @@ impl IoTHubClient {
         feature = "twin-properties"
     ))]
     pub async fn get_receiver(&mut self) -> Receiver<MessageType> {
-        self.transport.get_receiver().await
+        // self.transport.get_receiver().await
+        todo!()
     }
 
     ///
@@ -165,11 +180,13 @@ impl IoTHubClient {
         &mut self,
         response: DirectMethodResponse,
     ) -> crate::Result<()> {
-        self.transport.respond_to_direct_method(response).await
+        // self.transport.respond_to_direct_method(response).await
+        todo!()
     }
 
     ///
     pub async fn ping(&mut self) -> crate::Result<()> {
-        self.transport.ping().await
+        // self.transport.ping().await
+        todo!()
     }
 }

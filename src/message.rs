@@ -2,6 +2,13 @@
 use mqtt::packet::VariablePacketError;
 use std::collections::HashMap;
 
+#[derive(Debug)]
+pub enum ConnectionStatus {
+    Connecting,
+    Connected,
+    Disconnected,
+}
+
 /// Type of message received in cloud to device communication
 #[cfg(any(
     feature = "direct-methods",
@@ -23,6 +30,15 @@ pub enum MessageType {
     /// Error occurred in the message loop
     #[cfg(feature = "error-handling-messages")]
     ErrorReceive(VariablePacketError),
+    ConnectionStatusChanged(ConnectionStatus),
+}
+
+#[derive(Debug)]
+pub enum D2C {
+    DirectMethodResponse,
+    TwinPropertyUpdate,
+    TwinPropertyRequest,
+    Telemetry(Message),
 }
 
 /// Instance to respond to a direct method invocation

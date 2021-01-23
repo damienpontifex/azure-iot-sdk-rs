@@ -1,5 +1,6 @@
 //#[cfg(not(feature = "http-transport"))]
 mod mqtt;
+pub(crate) use self::mqtt::init;
 pub(crate) use self::mqtt::MqttTransport;
 
 use crate::{message::Message, token::TokenSource};
