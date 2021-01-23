@@ -626,3 +626,4 @@ mod tests {
         assert_eq!("topic/foo=bar", topic_with_properties);
     }
 }
+

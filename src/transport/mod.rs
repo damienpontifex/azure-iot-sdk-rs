@@ -1,3 +1,7 @@
+//#[cfg(not(feature = "http-transport"))]
+mod mqtt;
+pub(crate) use self::mqtt::MqttTransport;
+
 use crate::{message::Message, token::TokenSource};
 
 #[cfg(feature = "direct-methods")]
@@ -52,3 +56,4 @@ pub trait Transport<T> {
     ))]
     async fn get_receiver(&mut self) -> Receiver<MessageType>;
 }
+

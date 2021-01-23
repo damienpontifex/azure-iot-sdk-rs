@@ -16,7 +16,7 @@ use crate::{token::TokenSource, transport::Transport};
 use tokio::sync::mpsc::Receiver;
 
 #[cfg(not(feature = "http-transport"))]
-pub(crate) type ClientTransport = crate::mqtt_transport::MqttTransport;
+pub(crate) type ClientTransport = crate::transport::MqttTransport;
 
 /// Client for communicating with IoT hub
 #[derive(Debug, Clone)]

@@ -77,13 +77,8 @@ pub use client::*;
 pub mod message;
 pub use message::*;
 ///
-#[cfg(not(feature = "http-transport"))]
-pub(crate) mod mqtt_transport;
-///
 pub mod token;
 pub use token::*;
-/// Transport types
-pub mod transport;
 
 #[cfg(feature = "with-provision")]
 /// Provision support using Azure device provisioning service
@@ -91,3 +86,5 @@ pub mod provision;
 
 /// Convenience type alias for `std::result::Result<T, Box<dyn std::error::Error>>`
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+
+pub(crate) mod transport;
