@@ -23,13 +23,13 @@ use tokio_native_tls::{TlsConnector, TlsStream};
 
 use async_trait::async_trait;
 
-use crate::message::{Message, D2C, ConnectionStatus};
 #[cfg(any(
     feature = "direct-methods",
     feature = "c2d-messages",
     feature = "twin-properties"
 ))]
 use crate::message::MessageType;
+use crate::message::{ConnectionStatus, Message, D2C};
 #[cfg(feature = "direct-methods")]
 use crate::message::{DirectMethodInvocation, DirectMethodResponse};
 use crate::{token::TokenSource, transport::Transport};
@@ -84,20 +84,23 @@ const KEEP_ALIVE: u16 = 10;
 #[cfg(feature = "direct-methods")]
 const REQUEST_ID_PARAM: &str = "?$rid=";
 
-async fn ping<W>(write_socket: &mut W) -> crate::Result<()> where W: tokio::io::AsyncWriteExt + Unpin {
+async fn ping<W>(write_socket: &mut W) -> crate::Result<()>
+where
+    W: tokio::io::AsyncWriteExt + Unpin,
+{
     info!("Sending PINGREQ to broker");
 
     let pingreq_packet = PingreqPacket::new();
 
     let mut buf = Vec::new();
     pingreq_packet.encode(&mut buf).unwrap();
-    write_socket
-        .write_all(&buf)
-        .await
-        .map_err(|e| e.into())
+    write_socket.write_all(&buf).await.map_err(|e| e.into())
 }
 
-async fn subscribe<W>(write_socket: &mut W, device_id: &str) where W: tokio::io::AsyncWriteExt + Unpin {
+async fn subscribe<W>(write_socket: &mut W, device_id: &str)
+where
+    W: tokio::io::AsyncWriteExt + Unpin,
+{
     let topics = vec![
         #[cfg(feature = "direct-methods")]
         (
@@ -126,26 +129,108 @@ async fn subscribe<W>(write_socket: &mut W, device_id: &str) where W: tokio::io:
     let subscribe_packet = SubscribePacket::new(10, topics);
     let mut buf = Vec::new();
     subscribe_packet.encode(&mut buf).unwrap();
-    write_socket
-        .write_all(&buf[..])
-        .await
-        .unwrap();
+    write_socket.write_all(&buf[..]).await.unwrap();
 }
 
+async fn send_to_cloud<W>(to_send: D2C, device_id: &str, socket: &mut W)
+where
+    W: tokio::io::AsyncWriteExt + Unpin,
+{
+    match to_send {
+        D2C::DirectMethodResponse => {}
+        D2C::TwinPropertyUpdate => {}
+        D2C::TwinPropertyRequest => {}
+        D2C::Telemetry(message) => {
+            let full_topic = TopicName::new(cloud_bound_messages_topic(&device_id)).unwrap();
+            //trace!("Sending message {:?} to topic {:?}", message, full_topic);
+            info!("Sending message {:?} to topic {:?}", message, full_topic);
+            let publish_packet =
+                PublishPacket::new(full_topic, QoSWithPacketIdentifier::Level0, message.body);
+            let mut buf = Vec::new();
+            publish_packet.encode(&mut buf).unwrap();
 
-pub(crate) async fn init<TS>(iothub_hostname: String, device_id: String, token_source: TS, mut device_to_cloud_local_receiver: Receiver<D2C>, cloud_to_device: Sender<MessageType>) -> crate::Result<tokio::task::JoinHandle<()>> where TS: TokenSource {
-    let user_name = format!("{}/{}/?api-version=2018-06-30", iothub_hostname, device_id);
+            socket.write_all(&buf[..]).await.unwrap();
+        }
+    }
+}
 
-    // TODO: move into local async block/method so we can reuse this connection logic
-    let expiry = Utc::now() + Duration::days(1);
-    trace!("Generating token that will expire at {}", expiry);
-    let token = token_source.get(&expiry);
-    trace!("Using token {}", token);
+async fn from_cloud<W, TS>(
+    pk: Result<VariablePacket, VariablePacketError>,
+    device_id: &str,
+    socket: &mut W,
+    connector: &MqttConnector,
+    token_source: &TS,
+    cloud_to_device: &Sender<MessageType>,
+) where
+    W: tokio::io::AsyncWriteExt + Unpin,
+    TS: TokenSource + Send,
+{
+    match pk {
+        Ok(VariablePacket::PingrespPacket(..)) => {
+            info!("Receiving PINGRESP from broker ...");
+        }
+        Ok(VariablePacket::PublishPacket(ref publ)) => {
+            let mut message = Message::new(publ.payload_ref()[..].to_vec());
+            trace!("PUBLISH ({}): {:?}", publ.topic_name(), message);
+        }
+        Err(VariablePacketError::IoError(err)) => {
+            error!("{:?}", err);
+            let new_socket = connector.connect(token_source).await;
+        }
+        Err(err) => {
+            error!("Other error {:?}", err);
+        }
+        Ok(other) => {
+            info!("Other {:?}", other);
+        }
+    }
+}
 
+#[derive(Debug, Clone)]
+struct MqttConnector {
+    iothub_hostname: String,
+    device_id: String,
+}
+
+impl MqttConnector {
+    async fn connect(&self, token_source: &impl TokenSource) -> TlsStream<TcpStream> {
+        let user_name = format!(
+            "{}/{}/?api-version=2018-06-30",
+            self.iothub_hostname, self.device_id
+        );
+
+        // TODO: move into local async block/method so we can reuse this connection logic
+        let expiry = Utc::now() + Duration::days(1);
+        trace!("Generating token that will expire at {}", expiry);
+        let token = token_source.get(&expiry);
+        trace!("Using token {}", token);
+
+        return mqtt_connect(&self.iothub_hostname, &self.device_id, user_name, token)
+            .await
+            .unwrap();
+    }
+}
+
+pub(crate) async fn init<TS>(
+    iothub_hostname: String,
+    device_id: String,
+    token_source: TS,
+    mut device_to_cloud_local_receiver: Receiver<D2C>,
+    cloud_to_device: Sender<MessageType>,
+) -> crate::Result<tokio::task::JoinHandle<()>>
+where
+    TS: TokenSource + Send + Clone + 'static + Sync,
+{
+    let ts = token_source.clone();
     Ok(tokio::spawn(async move {
         // cloud_to_device.send(MessageType::ConnectionStatusChanged(ConnectionStatus::Connecting)).await.unwrap();
+        //
+        let connector = MqttConnector {
+            iothub_hostname,
+            device_id: device_id.clone(),
+        };
 
-        let mut socket = mqtt_connect(&iothub_hostname, &device_id, user_name.clone(), token.clone()).await.unwrap();
+        let mut socket = connector.connect(&ts).await;
 
         // cloud_to_device.send(MessageType::ConnectionStatusChanged(ConnectionStatus::Connected)).await.unwrap();
 
@@ -156,48 +241,13 @@ pub(crate) async fn init<TS>(iothub_hostname: String, device_id: String, token_s
         loop {
             tokio::select! {
                 pk = VariablePacket::parse(&mut socket) => {
-                    match pk {
-                        Ok(VariablePacket::PingrespPacket(..)) => {
-                            info!("Receiving PINGRESP from broker ...");
-                        },
-                        Ok(VariablePacket::PublishPacket(ref publ)) => {
-                            let mut message = Message::new(publ.payload_ref()[..].to_vec());
-                            trace!("PUBLISH ({}): {:?}", publ.topic_name(), message);
-                        },
-                        Err(VariablePacketError::IoError(err)) => {
-                            error!("{:?}", err);
-                            socket = mqtt_connect(&iothub_hostname, &device_id, user_name.clone(), token.clone()).await.unwrap();
-                        },
-                        Err(err) => {
-                            error!("Other error {:?}", err);
-                        }
-                        Ok(other) => {
-                            info!("Other {:?}", other);
-                        }
-                    }
+                    from_cloud(pk, &device_id, &mut socket, &connector, &ts, &cloud_to_device).await;
                 }
                 _ = ping_interval.tick() => {
                     ping(&mut socket).await.unwrap();
                 }
                 Some(to_send) = device_to_cloud_local_receiver.recv() => {
-                    match to_send {
-                        D2C::DirectMethodResponse => {},
-                        D2C::TwinPropertyUpdate => {},
-                        D2C::TwinPropertyRequest => {}
-                        D2C::Telemetry(message) => {
-                            let full_topic = TopicName::new(cloud_bound_messages_topic(&device_id)).unwrap();
-                            //trace!("Sending message {:?} to topic {:?}", message, full_topic);
-                            info!("Sending message {:?} to topic {:?}", message, full_topic);
-                            let publish_packet =
-                                PublishPacket::new(full_topic, QoSWithPacketIdentifier::Level0, message.body);
-                            let mut buf = Vec::new();
-                            publish_packet.encode(&mut buf).unwrap();
-
-                            socket
-                                .write_all(&buf[..])
-                                .await.unwrap();
-                        },
-                    }
+                    send_to_cloud(to_send, &device_id, &mut socket).await;
                 }
             }
         }
@@ -746,4 +796,3 @@ mod tests {
         assert_eq!("topic/foo=bar", topic_with_properties);
     }
 }
-

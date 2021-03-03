@@ -55,4 +55,3 @@ pub trait Transport<T> {
     ))]
     async fn get_receiver(&mut self) -> Receiver<MessageType>;
 }
-

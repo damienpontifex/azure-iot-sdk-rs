@@ -13,17 +13,17 @@ readme = "README.md"
 [features]
 default = ["c2d-messages", "direct-methods", "twin-properties", "with-provision", "error-handling-messages"]
 direct-methods = []
-twin-properties = []
+twin-properties = ["serde_json"]
 c2d-messages = []
 error-handling-messages = []
 # http-transport = ["hyper", "hyper-tls"]
-with-provision = ["hyper", "hyper-tls"]
+with-provision = ["hyper", "hyper-tls", "serde_json"]
 
 [dependencies]
 log = "0.4.0"
 mqtt-protocol = { version = "0.10", features = ["async"] }
 serde_urlencoded = "0.7"
-serde_json = "1.0"
+serde_json = { version = "1.0", optional = true }
 serde = { version = "1.0", features = ["derive"] }
 tokio = { version = "1.0", features = ["rt-multi-thread", "macros", "net", "io-util", "time", "sync"] }
 native-tls = "0.2.4"

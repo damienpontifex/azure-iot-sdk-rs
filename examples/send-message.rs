@@ -33,8 +33,9 @@ async fn main() {
     )
     .unwrap();
 
-    let mut client =
-        IoTHubClient::new(&config.hostname, config.device_id.clone(), token_source).await.unwrap();
+    let mut client = IoTHubClient::new(&config.hostname, config.device_id.clone(), token_source)
+        .await
+        .unwrap();
 
     info!("Initialized client");
 

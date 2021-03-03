@@ -1,6 +1,7 @@
-use std::sync::Arc;
+use crate::token::DeviceKeyTokenSource;
+use std::sync::{Arc, Mutex};
 
-use crate::{D2C, message::Message};
+use crate::token::TokenSource;
 #[cfg(feature = "direct-methods")]
 use crate::DirectMethodResponse;
 #[cfg(any(
@@ -9,7 +10,7 @@ use crate::DirectMethodResponse;
     feature = "twin-properties"
 ))]
 use crate::MessageType;
-use crate::{token::TokenSource};
+use crate::{message::Message, D2C};
 #[cfg(any(
     feature = "direct-methods",
     feature = "c2d-messages",
@@ -27,9 +28,29 @@ pub struct IoTHubClient {
     // transport: ClientTransport,
     transport_handle: Arc<tokio::task::JoinHandle<()>>,
     d2c_sender: tokio::sync::mpsc::Sender<D2C>,
+    c2d_receiver: Arc<Mutex<tokio::sync::mpsc::Receiver<MessageType>>>,
+}
+
+impl Drop for IoTHubClient {
+    fn drop(&mut self) {
+        self.transport_handle.abort();
+    }
 }
 
 impl IoTHubClient {
+    /// # Arguments
+    ///
+    /// * `hub_name` -
+    /// * `device_id` -
+    /// * `device_key` -
+    pub async fn new_with_device_key(
+        hub_name: &str,
+        device_id: String,
+        device_key: String,
+    ) -> crate::Result<IoTHubClient> {
+        let token_source = DeviceKeyTokenSource::new(hub_name, &device_id, device_key).unwrap();
+        Self::new(hub_name, device_id, token_source).await
+    }
     /// Create a new IoT Hub device client using a shared access signature
     ///
     /// # Arguments
@@ -62,20 +83,25 @@ impl IoTHubClient {
         token_source: TS,
     ) -> crate::Result<IoTHubClient>
     where
-        TS: TokenSource,
+        TS: TokenSource + Send + Clone + 'static + Sync,
     {
-        // let transport = ClientTransport::new(hub_name, device_id.clone(), token_source).await?;
-
         let (tx, rx) = tokio::sync::mpsc::channel(1024);
         let (tx1, rx1) = tokio::sync::mpsc::channel(1024);
-        let handle = crate::transport::mqtt::init(hub_name.to_string(), device_id.clone(), token_source,
-        rx, tx1).await.unwrap();
+        let handle = crate::transport::mqtt::init(
+            hub_name.to_string(),
+            device_id.clone(),
+            token_source,
+            rx,
+            tx1,
+        )
+        .await
+        .unwrap();
 
         Ok(Self {
             device_id,
-            // transport,
             transport_handle: Arc::new(handle),
             d2c_sender: tx,
+            c2d_receiver: Arc::new(Mutex::new(rx1)),
         })
     }
 
@@ -169,9 +195,8 @@ impl IoTHubClient {
         feature = "c2d-messages",
         feature = "twin-properties"
     ))]
-    pub async fn get_receiver(&mut self) -> Receiver<MessageType> {
-        // self.transport.get_receiver().await
-        todo!()
+    pub async fn get_receiver(&mut self) -> Arc<Mutex<Receiver<MessageType>>> {
+        self.c2d_receiver.clone()
     }
 
     ///
@@ -181,12 +206,6 @@ impl IoTHubClient {
         response: DirectMethodResponse,
     ) -> crate::Result<()> {
         // self.transport.respond_to_direct_method(response).await
-        todo!()
-    }
-
-    ///
-    pub async fn ping(&mut self) -> crate::Result<()> {
-        // self.transport.ping().await
         todo!()
     }
 }
