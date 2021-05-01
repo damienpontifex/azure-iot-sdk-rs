@@ -1,4 +1,4 @@
-use crate::{message::Message, token::TokenSource};
+use crate::message::Message;
 
 #[cfg(feature = "direct-methods")]
 use crate::message::DirectMethodResponse;
@@ -18,12 +18,7 @@ use tokio::sync::mpsc::Receiver;
 
 ///
 #[async_trait]
-pub trait Transport<T> {
-    ///
-    async fn new<TS>(hub_name: &str, device_id: String, token_source: TS) -> crate::Result<T>
-    where
-        TS: TokenSource + Sync + Send;
-
+pub trait Transport {
     ///
     async fn send_message(&mut self, message: Message) -> crate::Result<()>;
     ///

@@ -123,12 +123,13 @@ pub async fn get_iothub_from_provision_service(
     }
 
     // Extract retry-after response header for delay duration or default to 3s
-    let retry_after = std::time::Duration::from_secs(res
-        .headers()
-        .get(header::RETRY_AFTER)
-        .and_then(|h| h.to_str().ok())
-        .and_then(|h| h.parse().ok())
-        .unwrap_or(3));
+    let retry_after = std::time::Duration::from_secs(
+        res.headers()
+            .get(header::RETRY_AFTER)
+            .and_then(|h| h.to_str().ok())
+            .and_then(|h| h.parse().ok())
+            .unwrap_or(3),
+    );
 
     let body = hyper::body::to_bytes(res).await.unwrap();
     let reply: serde_json::Map<String, serde_json::Value> = serde_json::from_slice(&body).unwrap();
@@ -206,7 +207,7 @@ impl IoTHubClient {
                 .await?;
 
         let token_source = DeviceKeyTokenSource::new(&hubname, &device_id, device_key).unwrap();
-        let client = IoTHubClient::new(&hubname, device_id, token_source).await?;
+        let client = IoTHubClient::new(&hubname, device_id, token_source.clone()).await?;
         Ok(client)
     }
 }

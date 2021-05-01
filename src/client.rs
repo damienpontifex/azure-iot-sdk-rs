@@ -19,10 +19,21 @@ use tokio::sync::mpsc::Receiver;
 pub(crate) type ClientTransport = crate::mqtt_transport::MqttTransport;
 
 /// Client for communicating with IoT hub
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct IoTHubClient {
     device_id: String,
     transport: ClientTransport,
+}
+
+impl std::fmt::Debug for IoTHubClient {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        #[cfg(not(feature = "http-transport"))]
+        let transport_debug = "MQTT";
+        f.debug_struct("IoTHubClient")
+            .field("device_id", &self.device_id)
+            .field("transport", &transport_debug)
+            .finish()
+    }
 }
 
 impl IoTHubClient {
@@ -58,9 +69,10 @@ impl IoTHubClient {
         token_source: TS,
     ) -> crate::Result<IoTHubClient>
     where
-        TS: TokenSource + Sync + Send,
+        TS: TokenSource + Send + Sync + Clone + 'static,
     {
-        let transport = ClientTransport::new(hub_name, device_id.clone(), token_source).await?;
+        let transport =
+            ClientTransport::new(hub_name, device_id.clone(), token_source.clone()).await?;
 
         Ok(Self {
             device_id,

@@ -50,18 +50,14 @@ impl<'a> TokenSource for SasTokenSource<'_> {
 
 /// Authenticate using the devices key
 #[derive(Debug, Clone)]
-pub struct DeviceKeyTokenSource<'a> {
+pub struct DeviceKeyTokenSource {
     resource_uri: String,
-    key: &'a str,
+    key: String,
 }
 
-impl<'a> DeviceKeyTokenSource<'_> {
+impl DeviceKeyTokenSource {
     /// Make the source from the devices individual details
-    pub fn new(
-        hub: &str,
-        device_id: &str,
-        key: &'a str,
-    ) -> Result<DeviceKeyTokenSource<'a>, TokenError> {
+    pub fn new(hub: &str, device_id: &str, key: &str) -> Result<DeviceKeyTokenSource, TokenError> {
         // Verify key is base64
         let b64_key = base64::decode(&key).map_err(|_| TokenError::InvalidKeyFormat)?;
         // Verify key is the right length for Hmac
@@ -69,14 +65,14 @@ impl<'a> DeviceKeyTokenSource<'_> {
 
         Ok(DeviceKeyTokenSource {
             resource_uri: format!("{}%2Fdevices%2F{}", hub, device_id),
-            key,
+            key: key.to_string(),
         })
     }
 
     /// Make the source from a connection string for the device
     pub fn new_from_connection_string(
-        connection_string: &'a str,
-    ) -> Result<DeviceKeyTokenSource<'a>, TokenError> {
+        connection_string: &str,
+    ) -> Result<DeviceKeyTokenSource, TokenError> {
         let mut key = None;
         let mut device_id = None;
         let mut hub = None;
@@ -106,13 +102,13 @@ impl<'a> DeviceKeyTokenSource<'_> {
     }
 }
 
-impl<'a> TokenSource for DeviceKeyTokenSource<'_> {
+impl TokenSource for DeviceKeyTokenSource {
     fn get(&self, expiry: &DateTime<Utc>) -> String {
         let expiry_timestamp = expiry.timestamp();
 
         let to_sign = format!("{}\n{}", &self.resource_uri, expiry_timestamp);
 
-        let token = generate_token(self.key, &to_sign);
+        let token = generate_token(&self.key, &to_sign);
 
         let sas = format!(
             "SharedAccessSignature sr={}&{}&se={}",
