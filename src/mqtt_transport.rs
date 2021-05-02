@@ -185,11 +185,11 @@ pub(crate) struct MqttTransport {
 
 impl Drop for MqttTransport {
     fn drop(&mut self) {
-        // if let Some(recv_abort_handle) = &self.rx_loop_handle {
-        //     recv_abort_handle.abort();
-        // }
-        if let Some(ping_join_handle) = &self.ping_join_handle {
-            ping_join_handle.abort();
+        // Check to see whether we're the last instance holding the Arc and only abort the ping if so
+        if let Some(handle) = self.ping_join_handle.take() {
+            if let Ok(handle) = Arc::try_unwrap(handle) {
+                handle.abort();
+            }
         }
     }
 }
