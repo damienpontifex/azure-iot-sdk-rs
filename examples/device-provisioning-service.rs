@@ -8,7 +8,7 @@ use serde::Deserialize;
 #[derive(Debug, Deserialize)]
 struct DeviceConfig {
     scope_id: String,
-    device_id: String,
+    registration_id: String,
     device_key: String,
 }
 
@@ -26,7 +26,7 @@ async fn main() -> azure_iot_sdk::Result<()> {
 
     let config = DeviceConfig::from_env().unwrap();
 
-    let mut client = IoTHubClient::from_provision_service(&config.scope_id, config.device_id.to_string(), &config.device_key, 5).await.unwrap();
+    let mut client = IoTHubClient::from_provision_service(&config.scope_id, config.registration_id.to_string(), &config.device_key, 5).await.unwrap();
 
     info!("Initialized client {:?}", client);
 
