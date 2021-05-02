@@ -20,6 +20,7 @@ use tokio::net::TcpStream;
 use tokio::sync::mpsc::{channel, Receiver};
 use tokio::sync::Mutex;
 use tokio_native_tls::{TlsConnector, TlsStream};
+use tokio::time;
 
 use async_trait::async_trait;
 
@@ -178,16 +179,20 @@ pub(crate) struct MqttTransport {
     device_id: String,
     #[cfg(feature = "c2d-messages")]
     rx_topic_prefix: String,
+    ping_join_handle: Option<Arc<tokio::task::JoinHandle<()>>>,
     // rx_loop_handle: Option<AbortHandle>,
 }
 
-// impl Drop for MqttTransport {
-//     fn drop(&mut self) {
-//         if let Some(recv_abort_handle) = &self.rx_loop_handle {
-//             recv_abort_handle.abort();
-//         }
-//     }
-// }
+impl Drop for MqttTransport {
+    fn drop(&mut self) {
+        // if let Some(recv_abort_handle) = &self.rx_loop_handle {
+        //     recv_abort_handle.abort();
+        // }
+        if let Some(ping_join_handle) = &self.ping_join_handle {
+            ping_join_handle.abort();
+        }
+    }
+}
 
 impl MqttTransport {
     pub(crate) async fn new<TS>(
@@ -209,7 +214,7 @@ impl MqttTransport {
 
         let (read_socket, write_socket) = tokio::io::split(socket);
 
-        Ok(Self {
+        let mut mqtt_transport = Self {
             token_source: Box::new(Arc::new(token_source)),
             write_socket: Arc::new(Mutex::new(write_socket)),
             read_socket: Arc::new(Mutex::new(read_socket)),
@@ -217,7 +222,25 @@ impl MqttTransport {
             device_id: device_id.to_string(),
             #[cfg(feature = "c2d-messages")]
             rx_topic_prefix: device_bound_messages_topic_prefix(&device_id),
+            ping_join_handle: None,
             // rx_loop_handle: None,
+        };
+
+        mqtt_transport.ping_join_handle = Some(Arc::new(mqtt_transport.ping_on_secs_interval(15)));
+
+        Ok(mqtt_transport)
+    }
+
+    ///
+    fn ping_on_secs_interval(&self, ping_interval: u8) -> tokio::task::JoinHandle<()> {
+        let mut ping_interval = time::interval(time::Duration::from_secs(ping_interval.into()));
+        let mut cloned_self = self.clone();
+        tokio::spawn(async move {
+            loop {
+                ping_interval.tick().await;
+
+                let _ = cloned_self.ping().await;
+            }
         })
     }
 }
