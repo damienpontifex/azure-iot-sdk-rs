@@ -20,7 +20,7 @@ use tokio::net::TcpStream;
 use tokio::sync::mpsc::{channel, Receiver};
 use tokio::sync::Mutex;
 use tokio_native_tls::{TlsConnector, TlsStream};
-use tokio::time;
+use tokio::{time, task::JoinHandle};
 
 use async_trait::async_trait;
 
@@ -179,7 +179,7 @@ pub(crate) struct MqttTransport {
     device_id: String,
     #[cfg(feature = "c2d-messages")]
     rx_topic_prefix: String,
-    ping_join_handle: Option<Arc<tokio::task::JoinHandle<()>>>,
+    ping_join_handle: Option<Arc<JoinHandle<()>>>,
     // rx_loop_handle: Option<AbortHandle>,
 }
 
@@ -232,7 +232,7 @@ impl MqttTransport {
     }
 
     ///
-    fn ping_on_secs_interval(&self, ping_interval: u8) -> tokio::task::JoinHandle<()> {
+    fn ping_on_secs_interval(&self, ping_interval: u8) -> JoinHandle<()> {
         let mut ping_interval = time::interval(time::Duration::from_secs(ping_interval.into()));
         let mut cloned_self = self.clone();
         tokio::spawn(async move {
