@@ -169,8 +169,9 @@ pub(crate) async fn mqtt_connect(
 // }
 
 ///
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub(crate) struct MqttTransport {
+    token_source: Box<Arc<dyn TokenSource + Send + Sync + 'static>>,
     write_socket: Arc<Mutex<WriteHalf<TlsStream<TcpStream>>>>,
     read_socket: Arc<Mutex<ReadHalf<TlsStream<TcpStream>>>>,
     d2c_topic: TopicName,
@@ -188,15 +189,14 @@ pub(crate) struct MqttTransport {
 //     }
 // }
 
-#[async_trait]
-impl Transport<MqttTransport> for MqttTransport {
-    async fn new<TS>(
+impl MqttTransport {
+    pub(crate) async fn new<TS>(
         hub_name: &str,
         device_id: String,
         token_source: TS,
     ) -> crate::Result<MqttTransport>
     where
-        TS: TokenSource + Sync + Send,
+        TS: TokenSource + Send + Sync + 'static,
     {
         let user_name = format!("{}/{}/?api-version=2018-06-30", hub_name, device_id);
 
@@ -210,6 +210,7 @@ impl Transport<MqttTransport> for MqttTransport {
         let (read_socket, write_socket) = tokio::io::split(socket);
 
         Ok(Self {
+            token_source: Box::new(Arc::new(token_source)),
             write_socket: Arc::new(Mutex::new(write_socket)),
             read_socket: Arc::new(Mutex::new(read_socket)),
             d2c_topic: TopicName::new(cloud_bound_messages_topic(&device_id)).unwrap(),
@@ -219,7 +220,10 @@ impl Transport<MqttTransport> for MqttTransport {
             // rx_loop_handle: None,
         })
     }
+}
 
+#[async_trait]
+impl Transport for MqttTransport {
     async fn send_message(&mut self, message: Message) -> crate::Result<()> {
         let full_topic = build_topic_name(&self.d2c_topic, &message).unwrap();
         trace!("Sending message {:?} to topic {:?}", message, full_topic);
