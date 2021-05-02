@@ -77,7 +77,10 @@ pub use client::*;
 pub mod message;
 pub use message::*;
 ///
-#[cfg(not(feature = "http-transport"))]
+#[cfg(feature = "https-transport")]
+pub(crate) mod http_transport;
+///
+#[cfg(not(feature = "https-transport"))]
 pub(crate) mod mqtt_transport;
 ///
 pub mod token;

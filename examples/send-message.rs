@@ -38,7 +38,11 @@ async fn main() -> azure_iot_sdk::Result<()> {
 
     info!("Initialized client");
 
-    let msg = Message::new(b"Hello, world!".to_vec());
+    for _ in 0..5 {
+        let msg = Message::new(b"Hello, world!".to_vec());
 
-    client.send_message(msg).await
+        client.send_message(msg).await.expect("Failed to send message");
+    }
+
+    Ok(())
 }
