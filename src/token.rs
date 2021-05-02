@@ -61,7 +61,7 @@ impl DeviceKeyTokenSource {
         // Verify key is base64
         let b64_key = base64::decode(&key).map_err(|_| TokenError::InvalidKeyFormat)?;
         // Verify key is the right length for Hmac
-        Hmac::<Sha256>::new_varkey(&b64_key).map_err(|_| TokenError::InvalidKeyLength)?;
+        Hmac::<Sha256>::new_from_slice(&b64_key).map_err(|_| TokenError::InvalidKeyLength)?;
 
         Ok(DeviceKeyTokenSource {
             resource_uri: format!("{}%2Fdevices%2F{}", hub, device_id),
@@ -136,7 +136,7 @@ impl TokenSource for UsernamePasswordTokenSource {
 pub(crate) fn generate_token(key: &str, message: &str) -> String {
     // Checked base64 and hmac in new so should be safe to unwrap here
     let key = base64::decode(&key).unwrap();
-    let mut mac = Hmac::<Sha256>::new_varkey(&key).unwrap();
+    let mut mac = Hmac::<Sha256>::new_from_slice(&key).unwrap();
     mac.update(message.as_bytes());
     let mac_result = mac.finalize();
     let signature = base64::encode(mac_result.into_bytes());
