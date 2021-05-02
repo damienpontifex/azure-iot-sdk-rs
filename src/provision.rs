@@ -55,6 +55,12 @@ impl std::fmt::Display for ErrorKind {
 
 impl std::error::Error for ErrorKind {}
 
+#[derive(Debug)]
+struct ProvisionedResponse {
+    assigned_hub: String,
+    device_id: String,
+}
+
 /// Use the device provision service to get our IoT Hubname
 ///
 /// # Arguments
@@ -82,12 +88,12 @@ impl std::error::Error for ErrorKind {}
 /// }
 /// ```
 #[cfg(feature = "with-provision")]
-pub async fn get_iothub_from_provision_service(
+async fn get_iothub_from_provision_service(
     scope_id: &str,
     device_id: &str,
     device_key: &str,
     max_retries: i32,
-) -> Result<String, Box<dyn std::error::Error>> {
+) -> Result<ProvisionedResponse, Box<dyn std::error::Error>> {
     let expiry = Utc::now() + Duration::days(1);
     let expiry = expiry.timestamp();
     let sas = generate_registration_sas(scope_id, device_id, device_key, expiry);
@@ -162,7 +168,10 @@ pub async fn get_iothub_from_provision_service(
                 serde_json::from_slice(&body).unwrap();
             let registration_state = reply["registrationState"].as_object().unwrap();
             let hub = registration_state["assignedHub"].as_str().unwrap();
-            return Ok(hub.to_string());
+            return Ok(ProvisionedResponse {
+                assigned_hub: hub.to_string(),
+                device_id: registration_state["deviceId"].as_str().unwrap().to_string(),
+            });
         }
     }
 
@@ -202,12 +211,14 @@ impl IoTHubClient {
         device_key: &str,
         max_retries: i32,
     ) -> Result<IoTHubClient, Box<dyn std::error::Error>> {
-        let hubname =
+        let response =
             get_iothub_from_provision_service(scope_id, &device_id, device_key, max_retries)
                 .await?;
 
-        let token_source = DeviceKeyTokenSource::new(&hubname, &device_id, device_key).unwrap();
-        let client = IoTHubClient::new(&hubname, device_id, token_source.clone()).await?;
+        trace!("Connecting to hub {:?} after provisioning", response);
+
+        let token_source = DeviceKeyTokenSource::new(&response.assigned_hub, &response.device_id, device_key).unwrap();
+        let client = IoTHubClient::new(&response.assigned_hub, response.device_id, token_source.clone()).await?;
         Ok(client)
     }
 }
