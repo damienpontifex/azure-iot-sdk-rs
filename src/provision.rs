@@ -72,20 +72,6 @@ struct ProvisionedResponse {
 ///
 /// Note that this uses the default Azure device provisioning
 /// service, which may be blocked in some countries.
-///
-/// # Example
-/// ```no_run
-/// use azure_iot_sdk::provision::get_iothub_from_provision_service;
-///
-/// #[tokio::main]
-/// async fn main() {
-///
-/// let mut client = get_iothub_from_provision_service(
-///           "ScopeID",
-///           "DeviceID",
-///           "DeviceKey",
-///           4).await;
-/// }
 /// ```
 #[cfg(feature = "with-provision")]
 async fn get_iothub_from_provision_service(
