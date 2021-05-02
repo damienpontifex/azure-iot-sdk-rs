@@ -15,8 +15,10 @@ use crate::{token::TokenSource, transport::Transport};
 ))]
 use tokio::sync::mpsc::Receiver;
 
-#[cfg(not(feature = "http-transport"))]
+#[cfg(not(feature = "https-transport"))]
 pub(crate) type ClientTransport = crate::mqtt_transport::MqttTransport;
+#[cfg(feature = "https-transport")]
+pub(crate) type ClientTransport = crate::http_transport::HttpsTransport;
 
 /// Client for communicating with IoT hub
 #[derive(Clone)]
@@ -27,8 +29,10 @@ pub struct IoTHubClient {
 
 impl std::fmt::Debug for IoTHubClient {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        #[cfg(not(feature = "http-transport"))]
+        #[cfg(not(feature = "https-transport"))]
         let transport_debug = "MQTT";
+        #[cfg(feature = "https-transport")]
+        let transport_debug = "HTTP";
         f.debug_struct("IoTHubClient")
             .field("device_id", &self.device_id)
             .field("transport", &transport_debug)

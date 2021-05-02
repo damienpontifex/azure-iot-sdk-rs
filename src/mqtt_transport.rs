@@ -19,8 +19,8 @@ use tokio::net::TcpStream;
 ))]
 use tokio::sync::mpsc::{channel, Receiver};
 use tokio::sync::Mutex;
+use tokio::{task::JoinHandle, time};
 use tokio_native_tls::{TlsConnector, TlsStream};
-use tokio::{time, task::JoinHandle};
 
 use async_trait::async_trait;
 
@@ -199,7 +199,7 @@ impl MqttTransport {
         hub_name: &str,
         device_id: String,
         token_source: TS,
-    ) -> crate::Result<MqttTransport>
+    ) -> crate::Result<Self>
     where
         TS: TokenSource + Send + Sync + 'static,
     {

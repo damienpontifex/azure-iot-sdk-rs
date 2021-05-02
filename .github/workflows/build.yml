@@ -24,8 +24,11 @@ jobs:
         toolchain: stable
         components: rustfmt, clippy
 
-    - name: Release build
-      run: cargo build --release --all-features
+    - name: Release build (default features)
+      run: cargo build --release
+
+    - name: Release build (https transport)
+      run: cargo build --release --features https-transport
 
     - name: Tests
       if: github.event_name != 'pull_request'

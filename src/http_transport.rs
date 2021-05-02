@@ -1,64 +1,155 @@
-// use crate::client::TokenSource;
-// use crate::message::Message;
-// use crate::transport::{MessageHandler, Transport};
-// use async_trait::async_trait;
-// use chrono::{Duration, Utc};
-// use hyper::{client::HttpConnector, header, Body, Client, Method, Request};
-// use hyper_tls::HttpsConnector;
+use crate::message::Message;
+#[cfg(any(
+    feature = "direct-methods",
+    feature = "c2d-messages",
+    feature = "twin-properties"
+))]
+use crate::message::MessageType;
+#[cfg(feature = "direct-methods")]
+use crate::message::{DirectMethodInvocation, DirectMethodResponse};
+use crate::{token::TokenSource, transport::Transport};
+use async_trait::async_trait;
+use chrono::{DateTime, Duration, Utc};
+use hyper::{client::HttpConnector, header, Body, Client, Request};
+use hyper_tls::HttpsConnector;
+use std::sync::Arc;
+use tokio::sync::mpsc::{channel, Receiver};
+use tokio::{task::JoinHandle, time};
 
-// #[derive(Debug, Clone)]
-// pub(crate) struct HttpTransport<TS> {
-//     hub_name: String,
-//     device_id: String,
-//     token_source: TS,
-//     client: Client<HttpsConnector<HttpConnector>>,
-// }
+#[derive(Clone)]
+pub(crate) struct HttpsTransport {
+    token_source: Box<Arc<dyn TokenSource + Send + Sync + 'static>>,
+    hub_name: String,
+    device_id: String,
+    client: Client<HttpsConnector<HttpConnector>>,
+    ping_join_handle: Option<Arc<JoinHandle<()>>>,
+    token: String,
+    token_expiration: Option<DateTime<Utc>>,
+}
 
-// #[async_trait]
-// impl<TS> Transport for HttpTransport<TS>
-// where
-//     TS: TokenSource + Sync + Send,
-// {
-//     async fn new(hub_name: &str, device_id: &str, token_source: TS) -> Self
-//     where
-//         TS: TokenSource + Sync + Send,
-//     {
-//         let https = HttpsConnector::new();
-//         let client = Client::builder().build::<_, hyper::Body>(https);
-//         HttpTransport {
-//             hub_name: hub_name.to_string(),
-//             device_id: device_id.to_string(),
-//             token_source,
-//             client,
-//         }
-//     }
+impl HttpsTransport {
+    pub(crate) async fn new<TS>(
+        hub_name: &str,
+        device_id: String,
+        token_source: TS,
+    ) -> crate::Result<Self>
+    where
+        TS: TokenSource + Send + Sync + 'static,
+    {
+        let https = HttpsConnector::new();
+        let client = Client::builder().build::<_, hyper::Body>(https);
+        let mut transport = Self {
+            hub_name: hub_name.to_string(),
+            device_id: device_id.to_string(),
+            token_source: Box::new(Arc::new(token_source)),
+            client,
+            ping_join_handle: None,
+            token: String::new(),
+            token_expiration: None,
+        };
 
-//     async fn send_message(&mut self, message: Message) {
-//         let token_lifetime = Utc::now() + Duration::days(1);
-//         let req = Request::builder()
-//             .method(Method::POST)
-//             .uri(format!(
-//                 "https://{}/devices/{}/messages/events?api-version=2019-03-30",
-//                 self.hub_name, self.device_id
-//             ))
-//             .header(header::CONTENT_TYPE, "application/json")
-//             .header(
-//                 header::AUTHORIZATION,
-//                 self.token_source.get(&token_lifetime),
-//             )
-//             .body(Body::from(message.body))
-//             .unwrap();
+        // transport.ping_join_handle = Some(Arc::new(transport.ping_on_secs_interval(15)));
 
-//         let res = self.client.request(req).await.unwrap();
+        Ok(transport)
+    }
 
-//         debug!("Response: {}", res.status());
-//     }
+    ///
+    fn ping_on_secs_interval(&self, ping_interval: u8) -> JoinHandle<()> {
+        let mut ping_interval = time::interval(time::Duration::from_secs(ping_interval.into()));
+        let mut cloned_self = self.clone();
+        tokio::spawn(async move {
+            loop {
+                ping_interval.tick().await;
 
-//     async fn send_property_update(&mut self, _request_id: &str, _body: &str) {
-//         unimplemented!()
-//     }
+                let _ = cloned_self.ping().await;
+            }
+        })
+    }
 
-//     async fn set_message_handler(&mut self, _device_id: &str, _handler: MessageHandler) {
-//         unimplemented!()
-//     }
-// }
+    fn get_token<'a>(&'a mut self) -> &'a str {
+        let now = Utc::now();
+        // Generate a new auth token if none exists or the existing one will expire soon
+        let needs_new_token = self
+            .token_expiration
+            .and_then(|e| Some(e - now < chrono::Duration::minutes(5)))
+            .unwrap_or(true);
+
+        if needs_new_token {
+            let token_lifetime = now + Duration::days(1);
+            debug!("Generating new auth token that will expire at {}", token_lifetime);
+            self.token = self.token_source.get(&token_lifetime);
+            self.token_expiration = Some(token_lifetime);
+        }
+
+        &self.token
+    }
+}
+
+impl Drop for HttpsTransport {
+    fn drop(&mut self) {
+        // Check to see whether we're the last instance holding the Arc and only abort the ping if so
+        if let Some(handle) = self.ping_join_handle.take() {
+            if let Ok(handle) = Arc::try_unwrap(handle) {
+                handle.abort();
+            }
+        }
+    }
+}
+
+#[async_trait]
+impl Transport for HttpsTransport {
+    ///
+    async fn send_message(&mut self, message: Message) -> crate::Result<()> {
+        let req = Request::post(format!(
+            "https://{}/devices/{}/messages/events?api-version=2019-03-30",
+            self.hub_name, self.device_id
+        ))
+        .header(header::CONTENT_TYPE, "application/json")
+        .header(header::AUTHORIZATION, self.get_token())
+        .body(Body::from(message.body))
+        .unwrap();
+
+        match self.client.request(req).await {
+            Ok(res) => {
+                debug!("Response: {:?}", res);
+                Ok(())
+            }
+            Err(err) => Err(Box::new(err)),
+        }
+    }
+    ///
+    #[cfg(feature = "twin-properties")]
+    async fn send_property_update(&mut self, _request_id: &str, _body: &str) -> crate::Result<()> {
+        unimplemented!()
+    }
+
+    ///
+    #[cfg(feature = "twin-properties")]
+    async fn request_twin_properties(&mut self, _request_id: &str) -> crate::Result<()> {
+        unimplemented!()
+    }
+
+    ///
+    #[cfg(feature = "direct-methods")]
+    async fn respond_to_direct_method(
+        &mut self,
+        _response: DirectMethodResponse,
+    ) -> crate::Result<()> {
+        unimplemented!()
+    }
+
+    ///
+    async fn ping(&mut self) -> crate::Result<()> {
+        unimplemented!()
+    }
+
+    ///
+    #[cfg(any(
+        feature = "direct-methods",
+        feature = "c2d-messages",
+        feature = "twin-properties"
+    ))]
+    async fn get_receiver(&mut self) -> Receiver<MessageType> {
+        unimplemented!()
+    }
+}
