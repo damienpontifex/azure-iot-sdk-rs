@@ -380,7 +380,7 @@ impl Transport for MqttTransport {
                         info!("Receiving PINGRESP from broker ..");
                     }
                     VariablePacket::PublishPacket(ref publ) => {
-                        let mut message = Message::new(publ.payload_ref()[..].to_vec());
+                        let mut message = Message::new(publ.payload().to_vec());
                         trace!("PUBLISH ({}): {:?}", publ.topic_name(), message);
 
                         #[cfg(feature = "c2d-messages")]
