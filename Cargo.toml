@@ -17,7 +17,7 @@ twin-properties = []
 c2d-messages = []
 error-handling-messages = []
 https-transport = ["hyper", "hyper-tls"]
-with-provision = ["hyper", "hyper-tls"]
+with-provision = []
 
 [dependencies]
 log = "0.4.0"

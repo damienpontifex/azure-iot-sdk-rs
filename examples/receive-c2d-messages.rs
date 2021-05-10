@@ -24,17 +24,16 @@ impl DeviceConfig {
 async fn main() -> azure_iot_sdk::Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
-    let config = DeviceConfig::from_env().unwrap();
+    let DeviceConfig {
+        hostname,
+        device_id,
+        shared_access_key,
+    } = DeviceConfig::from_env().unwrap();
 
-    let token_source = DeviceKeyTokenSource::new(
-        &config.hostname,
-        &config.device_id,
-        &config.shared_access_key,
-    )
-    .unwrap();
+    let token_source =
+        DeviceKeyTokenSource::new(&hostname, &device_id, &shared_access_key).unwrap();
 
-    let mut client =
-        IoTHubClient::new(&config.hostname, config.device_id.clone(), token_source).await?;
+    let mut client = IoTHubClient::new(&hostname, device_id, token_source).await?;
 
     info!("Initialized client");
 
