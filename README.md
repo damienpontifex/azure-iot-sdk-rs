@@ -72,6 +72,6 @@ async fn main() {
     let msg = Message::new(b"Hello, world!".to_vec());
     let sender = client.send_message(msg);
 
-    futures::join!(receive_loop, sender);
+    tokio::join!(receive_loop, sender);
 }
 ```

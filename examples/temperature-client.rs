@@ -175,7 +175,7 @@ async fn main() -> azure_iot_sdk::Result<()> {
     };
 
     let (_, temp_sender_result, humidity_sender_result) =
-        futures::join!(receive_loop, temp_sender, humidity_sender);
+        tokio::join!(receive_loop, temp_sender, humidity_sender);
     //in real life you'd do something useful, like restart the process
     temp_sender_result.unwrap();
     humidity_sender_result.unwrap();
