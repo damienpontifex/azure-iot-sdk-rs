@@ -30,14 +30,10 @@ async fn main() -> azure_iot_sdk::Result<()> {
         device_key,
     } = DeviceConfig::from_env().unwrap();
 
-    let mut client = IoTHubClient::from_provision_service(
-        &scope_id,
-        registration_id,
-        &device_key,
-        5,
-    )
-    .await
-    .unwrap();
+    let mut client =
+        IoTHubClient::from_provision_service(&scope_id, registration_id, &device_key, 5)
+            .await
+            .unwrap();
 
     info!("Initialized client {:?}", client);
 
