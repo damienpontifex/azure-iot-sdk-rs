@@ -35,7 +35,6 @@ use crate::message::MessageType;
 use crate::message::{DirectMethodInvocation, DirectMethodResponse};
 use crate::{token::TokenSource, transport::Transport};
 use chrono::{Duration, Utc};
-// use futures::future::{AbortHandle, Abortable};
 use std::sync::Arc;
 
 // Incoming topic names
