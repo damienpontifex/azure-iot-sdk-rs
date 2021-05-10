@@ -393,10 +393,10 @@ impl Transport for MqttTransport {
                                     .unwrap();
                             for (key, value) in property_tuples {
                                 // We have properties after the topic path
-                                if key.starts_with("$.") {
+                                if let Some(system_property_key) = key.strip_prefix("$.") {
                                     message
                                         .system_properties
-                                        .insert(key[2..].to_string(), value);
+                                        .insert(system_property_key.to_string(), value);
                                 } else {
                                     message.properties.insert(key, value);
                                 }
@@ -444,7 +444,7 @@ impl Transport for MqttTransport {
                                 .send(MessageType::DirectMethod(DirectMethodInvocation {
                                     method_name: method_components[0].to_string(),
                                     message,
-                                    request_id: request_id,
+                                    request_id,
                                 }))
                                 .await
                                 .is_err()

@@ -98,7 +98,7 @@ impl DeviceKeyTokenSource {
             SHAREDACCESSKEY_KEY,
         ))?;
 
-        Ok(Self::new(hub, device_id, key)?)
+        Self::new(hub, device_id, key)
     }
 }
 

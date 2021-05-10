@@ -14,7 +14,7 @@ use hyper::{client::HttpConnector, header, Body, Client, Request};
 use hyper_tls::HttpsConnector;
 use std::sync::Arc;
 use tokio::sync::mpsc::Receiver;
-use tokio::{task::JoinHandle, time};
+use tokio::task::JoinHandle;
 
 #[derive(Clone)]
 pub(crate) struct HttpsTransport {
@@ -54,17 +54,17 @@ impl HttpsTransport {
     }
 
     ///
-    fn ping_on_secs_interval(&self, ping_interval: u8) -> JoinHandle<()> {
-        let mut ping_interval = time::interval(time::Duration::from_secs(ping_interval.into()));
-        let mut cloned_self = self.clone();
-        tokio::spawn(async move {
-            loop {
-                ping_interval.tick().await;
+    // fn ping_on_secs_interval(&self, ping_interval: u8) -> JoinHandle<()> {
+    //     let mut ping_interval = time::interval(time::Duration::from_secs(ping_interval.into()));
+    //     let mut cloned_self = self.clone();
+    //     tokio::spawn(async move {
+    //         loop {
+    //             ping_interval.tick().await;
 
-                let _ = cloned_self.ping().await;
-            }
-        })
-    }
+    //             let _ = cloned_self.ping().await;
+    //         }
+    //     })
+    // }
 
     fn get_token<'a>(&'a mut self) -> &'a str {
         let now = Utc::now();
