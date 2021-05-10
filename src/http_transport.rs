@@ -1,3 +1,5 @@
+#[cfg(feature = "direct-methods")]
+use crate::message::DirectMethodResponse;
 use crate::message::Message;
 #[cfg(any(
     feature = "direct-methods",
@@ -5,15 +7,13 @@ use crate::message::Message;
     feature = "twin-properties"
 ))]
 use crate::message::MessageType;
-#[cfg(feature = "direct-methods")]
-use crate::message::{DirectMethodInvocation, DirectMethodResponse};
 use crate::{token::TokenSource, transport::Transport};
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use hyper::{client::HttpConnector, header, Body, Client, Request};
 use hyper_tls::HttpsConnector;
 use std::sync::Arc;
-use tokio::sync::mpsc::{channel, Receiver};
+use tokio::sync::mpsc::Receiver;
 use tokio::{task::JoinHandle, time};
 
 #[derive(Clone)]
@@ -38,7 +38,7 @@ impl HttpsTransport {
     {
         let https = HttpsConnector::new();
         let client = Client::builder().build::<_, hyper::Body>(https);
-        let mut transport = Self {
+        let transport = Self {
             hub_name: hub_name.to_string(),
             device_id: device_id.to_string(),
             token_source: Box::new(Arc::new(token_source)),
@@ -71,12 +71,15 @@ impl HttpsTransport {
         // Generate a new auth token if none exists or the existing one will expire soon
         let needs_new_token = self
             .token_expiration
-            .and_then(|e| Some(e - now < chrono::Duration::minutes(5)))
+            .map(|e| e - now < chrono::Duration::minutes(5))
             .unwrap_or(true);
 
         if needs_new_token {
             let token_lifetime = now + Duration::days(1);
-            debug!("Generating new auth token that will expire at {}", token_lifetime);
+            debug!(
+                "Generating new auth token that will expire at {}",
+                token_lifetime
+            );
             self.token = self.token_source.get(&token_lifetime);
             self.token_expiration = Some(token_lifetime);
         }

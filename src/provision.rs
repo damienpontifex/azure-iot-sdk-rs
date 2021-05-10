@@ -6,17 +6,22 @@ use hyper::{header, Body, Client, Method, Request, StatusCode};
 #[cfg(feature = "https-transport")]
 use hyper_tls::HttpsConnector;
 
-// TODO: Wrap these that aren't needed in https with #[cfg(not(feature = "https-transport"))]
-use tokio::net::TcpStream;
+#[cfg(not(feature = "https-transport"))]
+use mqtt::{
+    control::variable_header::ConnectReturnCode,
+    packet::*,
+    Encodable, TopicName, {QualityOfService, TopicFilter},
+};
+#[cfg(not(feature = "https-transport"))]
+use tokio::{io::AsyncWriteExt, net::TcpStream};
+#[cfg(not(feature = "https-transport"))]
 use tokio_native_tls::TlsConnector;
-use mqtt::{QualityOfService, TopicFilter};
-use mqtt::control::variable_header::ConnectReturnCode;
-use mqtt::packet::*;
-use mqtt::Encodable;
-use mqtt::TopicName;
-use tokio::io::AsyncWriteExt;
 
-use crate::{Message, client::IoTHubClient, token::{generate_token, DeviceKeyTokenSource}};
+use crate::{
+    client::IoTHubClient,
+    token::{generate_token, DeviceKeyTokenSource},
+    Message,
+};
 
 const DPS_HOST: &str = "global.azure-devices-provisioning.net";
 const DPS_API_VERSION: &str = "api-version=2019-03-31";
@@ -213,7 +218,10 @@ async fn get_iothub_from_provision_service(
     conn.set_client_identifier(registration_id);
     conn.set_clean_session(false);
     conn.set_keep_alive(10);
-    let username = format!("{}/registrations/{}/{}", scope_id, registration_id, DPS_API_VERSION);
+    let username = format!(
+        "{}/registrations/{}/{}",
+        scope_id, registration_id, DPS_API_VERSION
+    );
     conn.set_user_name(Some(username));
 
     let expiry = Utc::now() + Duration::days(1);
@@ -247,37 +255,36 @@ async fn get_iothub_from_provision_service(
         Err(err) => Err(format!("Error decoding connack packet {:?}", err)),
     }?;
 
-    let topics = vec![
-            (
-                TopicFilter::new("$dps/registrations/res/#").unwrap(),
-                QualityOfService::Level0,
-            ),
-        ];
+    let topics = vec![(
+        TopicFilter::new("$dps/registrations/res/#").unwrap(),
+        QualityOfService::Level0,
+    )];
 
     trace!("Subscribing to {:?}", topics);
 
     let subscribe_packet = SubscribePacket::new(10, topics);
     let mut buf = Vec::new();
     subscribe_packet.encode(&mut buf).unwrap();
-    socket
-        .write_all(&buf[..])
-        .await
-        .unwrap();
+    socket.write_all(&buf[..]).await.unwrap();
 
-    let register_topic = TopicName::new(format!("$dps/registrations/PUT/iotdps-register/?$rid={request_id}", request_id=1)).unwrap();
+    let register_topic = TopicName::new(format!(
+        "$dps/registrations/PUT/iotdps-register/?$rid={request_id}",
+        request_id = 1
+    ))
+    .unwrap();
     let device_registration = serde_json::json!({
         "registrationId": registration_id,
     });
 
-    let publish_packet =
-        PublishPacket::new(register_topic, QoSWithPacketIdentifier::Level0, device_registration.to_string());
+    let publish_packet = PublishPacket::new(
+        register_topic,
+        QoSWithPacketIdentifier::Level0,
+        device_registration.to_string(),
+    );
     let mut buf = Vec::new();
     publish_packet.encode(&mut buf).unwrap();
 
-    socket
-        .write_all(&buf[..])
-        .await
-        .unwrap();
+    socket.write_all(&buf[..]).await.unwrap();
 
     loop {
         let packet = match VariablePacket::parse(&mut socket).await {
@@ -295,14 +302,12 @@ async fn get_iothub_from_provision_service(
 
         match packet {
             VariablePacket::PublishPacket(ref publ) => {
-                let message = Message::new(publ.payload_ref()[..].to_vec());
+                let message = Message::new(publ.payload().to_vec());
                 trace!("PUBLISH ({}): {:?}", publ.topic_name(), message);
                 if publ.topic_name().starts_with("$dps/registrations/res/") {
-
                     let query_offset = publ.topic_name().find('?').unwrap();
                     let property_tuples: HashMap<String, String> =
-                                serde_urlencoded::from_str(&publ.topic_name()[query_offset..])
-                                    .unwrap();
+                        serde_urlencoded::from_str(&publ.topic_name()[query_offset..]).unwrap();
                     trace!("Response properties {:?}", property_tuples);
 
                     let body: serde_json::Value = serde_json::from_slice(&message.body).unwrap();
@@ -320,7 +325,10 @@ async fn get_iothub_from_provision_service(
                             let hub = registration_state["assignedHub"].as_str().unwrap();
                             return Ok(ProvisionedResponse {
                                 assigned_hub: hub.to_string(),
-                                device_id: registration_state["deviceId"].as_str().unwrap().to_string(),
+                                device_id: registration_state["deviceId"]
+                                    .as_str()
+                                    .unwrap()
+                                    .to_string(),
                             });
                         }
                     }
@@ -332,8 +340,10 @@ async fn get_iothub_from_provision_service(
 
                     if let Some(retry_after) = property_tuples.get("retry-after") {
                         trace!("Retrying after {}", retry_after);
-                        let retry_value_secs: u64 = retry_after.parse().expect("retry-after to be an integer");
-                        tokio::time::sleep(tokio::time::Duration::from_secs(retry_value_secs)).await;
+                        let retry_value_secs: u64 =
+                            retry_after.parse().expect("retry-after to be an integer");
+                        tokio::time::sleep(tokio::time::Duration::from_secs(retry_value_secs))
+                            .await;
                     }
 
                     let topic_name = TopicName::new(format!("$dps/registrations/GET/iotdps-get-operationstatus/?$rid={request_id}&operationId={operation_id}", request_id = 1, operation_id = operation_id)).unwrap();
@@ -342,13 +352,10 @@ async fn get_iothub_from_provision_service(
                     let mut buf = Vec::new();
                     publish_packet.encode(&mut buf).unwrap();
 
-                    socket
-                        .write_all(&buf[..])
-                        .await
-                        .unwrap();
+                    socket.write_all(&buf[..]).await.unwrap();
                 }
-            },
-            _ => {},
+            }
+            _ => {}
         }
     }
 
@@ -394,8 +401,15 @@ impl IoTHubClient {
 
         trace!("Connecting to hub {:?} after provisioning", response);
 
-        let token_source = DeviceKeyTokenSource::new(&response.assigned_hub, &response.device_id, device_key).unwrap();
-        let client = IoTHubClient::new(&response.assigned_hub, response.device_id, token_source.clone()).await?;
+        let token_source =
+            DeviceKeyTokenSource::new(&response.assigned_hub, &response.device_id, device_key)
+                .unwrap();
+        let client = IoTHubClient::new(
+            &response.assigned_hub,
+            response.device_id,
+            token_source.clone(),
+        )
+        .await?;
         Ok(client)
     }
 }
