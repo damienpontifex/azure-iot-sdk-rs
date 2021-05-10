@@ -40,7 +40,7 @@ impl HttpsTransport {
         let client = Client::builder().build::<_, hyper::Body>(https);
         let transport = Self {
             hub_name: hub_name.to_string(),
-            device_id: device_id.to_string(),
+            device_id,
             token_source: Box::new(Arc::new(token_source)),
             client,
             ping_join_handle: None,
@@ -66,7 +66,7 @@ impl HttpsTransport {
     //     })
     // }
 
-    fn get_token<'a>(&'a mut self) -> &'a str {
+    fn get_token(&mut self) -> &str {
         let now = Utc::now();
         // Generate a new auth token if none exists or the existing one will expire soon
         let needs_new_token = self
