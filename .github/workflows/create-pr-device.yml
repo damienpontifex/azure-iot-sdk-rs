@@ -3,7 +3,7 @@ name: Create device for PR
 on:
   pull_request:
     branches:
-    - master
+    - main
     types:
     - opened
     - reopened
