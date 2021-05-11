@@ -9,14 +9,14 @@ use hyper_tls::HttpsConnector;
 
 #[cfg(not(feature = "https-transport"))]
 use mqtt::{
-    control::variable_header::ConnectReturnCode,
     packet::*,
     Encodable, TopicName, {QualityOfService, TopicFilter},
 };
 #[cfg(not(feature = "https-transport"))]
-use tokio::{io::AsyncWriteExt, net::TcpStream};
+use tokio::io::AsyncWriteExt;
+
 #[cfg(not(feature = "https-transport"))]
-use tokio_native_tls::TlsConnector;
+use crate::mqtt_transport::mqtt_connect;
 
 use crate::{
     client::IoTHubClient,
@@ -197,61 +197,14 @@ async fn get_iothub_from_provision_service(
     device_key: &str,
     max_retries: i32,
 ) -> Result<ProvisionedResponse, Box<dyn std::error::Error>> {
-    let socket = TcpStream::connect((DPS_HOST, 8883)).await?;
-
-    debug!("Connected to tcp socket {:?}", socket);
-
-    let cx = TlsConnector::from(
-        native_tls::TlsConnector::builder()
-            .min_protocol_version(Some(native_tls::Protocol::Tlsv12))
-            .build()
-            .unwrap(),
-    );
-
-    let mut socket = cx.connect(DPS_HOST, socket).await?;
-
-    debug!("Connected tls context {:?}", cx);
-
-    let mut conn = ConnectPacket::new(registration_id);
-    conn.set_client_identifier(registration_id);
-    conn.set_clean_session(false);
-    conn.set_keep_alive(10);
     let username = format!(
         "{}/registrations/{}/{}",
         scope_id, registration_id, DPS_API_VERSION
     );
-    conn.set_user_name(Some(username));
-
     let expiry = Utc::now() + Duration::days(1);
     let expiry = expiry.timestamp();
     let sas = generate_registration_sas(scope_id, registration_id, device_key, expiry);
-    conn.set_password(Some(sas));
-
-    let mut buf = Vec::new();
-    conn.encode(&mut buf).unwrap();
-    socket.write_all(&buf[..]).await?;
-
-    let packet = VariablePacket::parse(&mut socket).await;
-
-    debug!("PACKET {:?}", packet);
-    match packet {
-        //TODO: Enum error type instead of strings
-        Ok(VariablePacket::ConnackPacket(connack)) => {
-            if connack.connect_return_code() != ConnectReturnCode::ConnectionAccepted {
-                Err(format!(
-                    "Failed to connect to server, return code {:?}",
-                    connack.connect_return_code()
-                ))
-            } else {
-                Ok(())
-            }
-        }
-        Ok(pck) => Err(format!(
-            "Unexpected packet received after connect {:?}",
-            pck
-        )),
-        Err(err) => Err(format!("Error decoding connack packet {:?}", err)),
-    }?;
+    let mut socket = mqtt_connect(DPS_HOST, registration_id, username, sas).await?;
 
     let topics = vec![(
         TopicFilter::new("$dps/registrations/res/#").unwrap(),
@@ -291,11 +244,16 @@ async fn get_iothub_from_provision_service(
             debug!("PUBLISH {:?}", publ);
             let message = Message::new(publ.payload().to_vec());
             if publ.topic_name().starts_with("$dps/registrations/res/") {
-
                 let body: serde_json::Value = serde_json::from_slice(&message.body).unwrap();
 
                 // 200 Status response
-                if Some(200) == publ.topic_name().split('/').nth_back(1).and_then(|s| s.parse::<u8>().ok()) {
+                if Some(200)
+                    == publ
+                        .topic_name()
+                        .split('/')
+                        .nth_back(1)
+                        .and_then(|s| s.parse::<u8>().ok())
+                {
                     let registration_state = body["registrationState"].as_object().unwrap();
                     let hub = registration_state["assignedHub"].as_str().unwrap();
                     return Ok(ProvisionedResponse {
@@ -310,11 +268,15 @@ async fn get_iothub_from_provision_service(
                 }
 
                 let query_offset = publ.topic_name().find('?').unwrap();
-                let property_tuples: HashMap<&str, &str> = serde_urlencoded::from_str(&publ.topic_name()[query_offset..]).unwrap();
+                let property_tuples: HashMap<&str, &str> =
+                    serde_urlencoded::from_str(&publ.topic_name()[query_offset..]).unwrap();
 
                 let operation_id = body["operationId"].as_str().unwrap_or_default();
 
-                if let Some(retry_after) = property_tuples.get("retry-after").and_then(|r| r.parse::<u64>().ok()) {
+                if let Some(retry_after) = property_tuples
+                    .get("retry-after")
+                    .and_then(|r| r.parse::<u64>().ok())
+                {
                     tokio::time::sleep(tokio::time::Duration::from_secs(retry_after)).await;
                 }
 
