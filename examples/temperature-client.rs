@@ -1,31 +1,11 @@
-#[macro_use]
-extern crate log;
-
 use azure_iot_sdk::{
     DeviceKeyTokenSource, DirectMethodResponse, IoTHubClient, Message, MessageType,
 };
-
 use chrono::{DateTime, Utc};
-use tokio::time;
-
-use serde::{Deserialize, Serialize};
-
+use log::{error, info};
 use rand_distr::{Distribution, Normal};
-
-#[derive(Debug, Deserialize)]
-struct DeviceConfig {
-    hostname: String,
-    device_id: String,
-    shared_access_key: String,
-}
-
-impl DeviceConfig {
-    fn from_env() -> Result<Self, config::ConfigError> {
-        let mut cfg = config::Config::default();
-        cfg.merge(config::File::with_name("examples/config"))?;
-        cfg.try_into()
-    }
-}
+use serde::Serialize;
+use tokio::time;
 
 #[derive(Serialize, Debug)]
 struct TemperatureReading {
@@ -37,13 +17,15 @@ struct TemperatureSensor {
     distribution: Normal<f32>,
 }
 
-impl TemperatureSensor {
+impl Default for TemperatureSensor {
     fn default() -> Self {
         TemperatureSensor {
             distribution: Normal::new(25.0, 7.0).unwrap(),
         }
     }
+}
 
+impl TemperatureSensor {
     fn get_reading(&self) -> TemperatureReading {
         TemperatureReading {
             timestamp: Utc::now(),
@@ -62,13 +44,15 @@ struct HumiditySensor {
     distribution: Normal<f32>,
 }
 
-impl HumiditySensor {
+impl Default for HumiditySensor {
     fn default() -> Self {
         Self {
             distribution: Normal::new(50.0, 7.0).unwrap(),
         }
     }
+}
 
+impl HumiditySensor {
     fn get_reading(&self) -> HumidityReading {
         HumidityReading {
             timestamp: Utc::now(),
@@ -81,11 +65,12 @@ impl HumiditySensor {
 async fn main() -> azure_iot_sdk::Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
-    let DeviceConfig {
-        hostname,
-        device_id,
-        shared_access_key,
-    } = DeviceConfig::from_env().unwrap();
+    let hostname = std::env::var("IOTHUB_HOSTNAME")
+        .expect("Set IoT Hub hostname in the IOTHUB_HOSTNAME environment variable");
+    let device_id = std::env::var("DEVICE_ID")
+        .expect("Set the device id in the DEVICE_ID environment variable");
+    let shared_access_key = std::env::var("SHARED_ACCESS_KEY")
+        .expect("Set the device shared access key in the SHARED_ACCESS_KEY environment variable");
 
     let token_source =
         DeviceKeyTokenSource::new(&hostname, &device_id, &shared_access_key).unwrap();

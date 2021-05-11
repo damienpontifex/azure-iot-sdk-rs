@@ -1,34 +1,17 @@
-#[macro_use]
-extern crate log;
-
 use azure_iot_sdk::{IoTHubClient, Message};
-
-use serde::Deserialize;
-
-#[derive(Debug, Deserialize)]
-struct DeviceConfig {
-    scope_id: String,
-    registration_id: String,
-    device_key: String,
-}
-
-impl DeviceConfig {
-    fn from_env() -> Result<Self, config::ConfigError> {
-        let mut cfg = config::Config::default();
-        cfg.merge(config::File::with_name("examples/config"))?;
-        cfg.try_into()
-    }
-}
+use log::info;
 
 #[tokio::main]
 async fn main() -> azure_iot_sdk::Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
-    let DeviceConfig {
-        scope_id,
-        registration_id,
-        device_key,
-    } = DeviceConfig::from_env().unwrap();
+    let scope_id = std::env::var("DPS_SCOPE_ID").expect(
+        "Set the device provisioning service scope id in the DPS_SCOPE_ID environment variable",
+    );
+    let registration_id = std::env::var("DPS_REGISTRATION_ID").expect("Set the device provisioning service registration id in the DPS_REGISTRATION_ID environment variable");
+    let device_key = std::env::var("DPS_DEVICE_KEY").expect(
+        "Set the device provisioning service device key in the DPS_DEVICE_KEY environment variable",
+    );
 
     let mut client =
         IoTHubClient::from_provision_service(&scope_id, registration_id, &device_key, 5)
