@@ -116,15 +116,15 @@ async fn tcp_connect(iot_hub: &str) -> crate::Result<TlsStream<TcpStream>> {
 }
 
 pub(crate) async fn mqtt_connect(
-    iot_hub: &str,
-    device_id: &str,
+    hostname: &str,
+    client_identifier: &str,
     username: impl ToString,
     password: impl ToString,
 ) -> crate::Result<TlsStream<TcpStream>> {
-    let mut socket = tcp_connect(iot_hub).await?;
+    let mut socket = tcp_connect(hostname).await?;
 
-    let mut conn = ConnectPacket::new(device_id);
-    conn.set_client_identifier(device_id);
+    let mut conn = ConnectPacket::new(client_identifier);
+    conn.set_client_identifier(client_identifier);
     conn.set_clean_session(false);
     conn.set_keep_alive(KEEP_ALIVE);
     conn.set_user_name(Some(username.to_string()));
