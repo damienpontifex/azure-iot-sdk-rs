@@ -225,7 +225,7 @@ impl MqttTransport {
             // rx_loop_handle: None,
         };
 
-        mqtt_transport.ping_join_handle = Some(Arc::new(mqtt_transport.ping_on_secs_interval(15)));
+        mqtt_transport.ping_join_handle = Some(Arc::new(mqtt_transport.ping_on_secs_interval(8)));
 
         Ok(mqtt_transport)
     }
