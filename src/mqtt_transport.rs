@@ -327,7 +327,7 @@ impl Transport for MqttTransport {
     }
 
     async fn ping(&mut self) -> crate::Result<()> {
-        info!("Sending PINGREQ to broker");
+        debug!("Sending PINGREQ to broker");
 
         let pingreq_packet = PingreqPacket::new();
 
@@ -376,7 +376,7 @@ impl Transport for MqttTransport {
                 match packet {
                     // TODO: handle ping req from server and we should send ping response in return
                     VariablePacket::PingrespPacket(..) => {
-                        info!("Receiving PINGRESP from broker ..");
+                        debug!("Receiving PINGRESP from broker ..");
                     }
                     VariablePacket::PublishPacket(ref publ) => {
                         let mut message = Message::new(publ.payload().to_vec());
