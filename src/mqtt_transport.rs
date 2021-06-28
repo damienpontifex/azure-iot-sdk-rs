@@ -33,7 +33,7 @@ use crate::message::Message;
 use crate::message::MessageType;
 #[cfg(feature = "direct-methods")]
 use crate::message::{DirectMethodInvocation, DirectMethodResponse};
-use crate::{token::TokenSource, transport::Transport};
+use crate::{token::TokenSource, transport::Transport, dtmi::Dtmi};
 use chrono::{Duration, Utc};
 use std::sync::Arc;
 
@@ -198,11 +198,16 @@ impl MqttTransport {
         hub_name: &str,
         device_id: String,
         token_source: TS,
+        model_id: Option<Dtmi>,
     ) -> crate::Result<Self>
     where
         TS: TokenSource + Send + Sync + 'static,
     {
-        let user_name = format!("{}/{}/?api-version=2018-06-30", hub_name, device_id);
+        let user_name = if let Some(model_id) = model_id {
+            format!("{}/{}/?api-version=2020-09-30&model-id={}", hub_name, device_id, model_id.0)
+        } else {
+            format!("{}/{}/?api-version=2018-06-30", hub_name, device_id)
+        };
 
         let expiry = Utc::now() + Duration::days(1);
         trace!("Generating token that will expire at {}", expiry);

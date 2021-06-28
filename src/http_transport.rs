@@ -7,7 +7,7 @@ use crate::message::Message;
     feature = "twin-properties"
 ))]
 use crate::message::MessageType;
-use crate::{token::TokenSource, transport::Transport};
+use crate::{token::TokenSource, transport::Transport, dtmi::Dtmi};
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use hyper::{client::HttpConnector, header, Body, Client, Request};
@@ -32,6 +32,7 @@ impl HttpsTransport {
         hub_name: &str,
         device_id: String,
         token_source: TS,
+        _model_id: Option<Dtmi>, // Unused because PNP only supports model IDs over MQTT
     ) -> crate::Result<Self>
     where
         TS: TokenSource + Send + Sync + 'static,

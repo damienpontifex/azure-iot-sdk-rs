@@ -14,7 +14,7 @@ async fn main() -> azure_iot_sdk::Result<()> {
     );
 
     let mut client =
-        IoTHubClient::from_provision_service(&scope_id, registration_id, &device_key, 5)
+        IoTHubClient::from_provision_service(&scope_id, registration_id, &device_key, 5, None)
             .await
             .unwrap();
 

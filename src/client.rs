@@ -7,7 +7,7 @@ use crate::DirectMethodResponse;
     feature = "twin-properties"
 ))]
 use crate::MessageType;
-use crate::{token::TokenSource, transport::Transport};
+use crate::{token::TokenSource, transport::Transport, dtmi::Dtmi};
 #[cfg(any(
     feature = "direct-methods",
     feature = "c2d-messages",
@@ -76,7 +76,53 @@ impl IoTHubClient {
         TS: TokenSource + Send + Sync + Clone + 'static,
     {
         let transport =
-            ClientTransport::new(hub_name, device_id.clone(), token_source.clone()).await?;
+            ClientTransport::new(hub_name, device_id.clone(), token_source.clone(), None).await?;
+
+        Ok(Self {
+            device_id,
+            transport,
+        })
+    }
+
+    /// Create a new IoT Hub device client using a shared access signature with a PNP model ID
+    ///
+    /// # Arguments
+    ///
+    /// * `hub_name` - The IoT hub resource name
+    /// * `device_id` - The registered device to connect as
+    /// * `token_source` - The token source to provide authentication
+    /// * `model_id` - The PNP model ID
+    ///
+    /// # Example
+    /// ```no_run
+    /// use azure_iot_sdk::{IoTHubClient, DeviceKeyTokenSource};
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let iothub_hostname = "iothubname.azure-devices.net";
+    ///     let device_id = "MyDeviceId";
+    ///     let token_source = DeviceKeyTokenSource::new(
+    ///         iothub_hostname,
+    ///         device_id,
+    ///         "TheAccessKey",
+    ///     ).unwrap();
+    ///     let model_id = Some("dtmi:com:adt:dtsample:home;1".parse().unwrap());
+    ///
+    ///     let mut client =
+    ///         IoTHubClient::new_with_pnp(iothub_hostname, device_id.into(), token_source, model_id).await;
+    /// }
+    /// ```
+    pub async fn new_with_pnp<TS>(
+        hub_name: &str,
+        device_id: String,
+        token_source: TS,
+        model_id: Option<Dtmi>,
+    ) -> crate::Result<IoTHubClient>
+    where
+        TS: TokenSource + Send + Sync + Clone + 'static,
+    {
+        let transport =
+            ClientTransport::new(hub_name, device_id.clone(), token_source.clone(), model_id).await?;
 
         Ok(Self {
             device_id,

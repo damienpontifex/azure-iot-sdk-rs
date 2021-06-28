@@ -21,6 +21,7 @@ use crate::mqtt_transport::mqtt_connect;
 use crate::{
     client::IoTHubClient,
     token::{generate_token, DeviceKeyTokenSource},
+    dtmi::Dtmi,
 };
 
 #[cfg(not(feature = "https-transport"))]
@@ -326,6 +327,7 @@ impl IoTHubClient {
         device_id: String,
         device_key: &str,
         max_retries: i32,
+        model_id: Option<Dtmi>,
     ) -> Result<IoTHubClient, Box<dyn std::error::Error>> {
         let response =
             get_iothub_from_provision_service(scope_id, &device_id, device_key, max_retries)
@@ -336,10 +338,11 @@ impl IoTHubClient {
         let token_source =
             DeviceKeyTokenSource::new(&response.assigned_hub, &response.device_id, device_key)
                 .unwrap();
-        let client = IoTHubClient::new(
+        let client = IoTHubClient::new_with_pnp(
             &response.assigned_hub,
             response.device_id,
             token_source.clone(),
+            model_id,
         )
         .await?;
         Ok(client)
