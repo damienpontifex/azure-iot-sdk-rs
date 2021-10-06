@@ -75,13 +75,22 @@ impl IoTHubClient {
     where
         TS: TokenSource + Send + Sync + Clone + 'static,
     {
-        let transport =
-            ClientTransport::new(hub_name, device_id.clone(), token_source.clone()).await?;
+        Self::builder(hub_name, device_id, token_source)
+            .build()
+            .await
+    }
 
-        Ok(Self {
+    /// Create a new builder
+    pub fn builder<TS>(
+        hub_name: &str,
+        device_id: String,
+        token_source: TS,
+    ) -> IoTHubClientBuilder<TS> {
+        IoTHubClientBuilder {
+            hub_name: hub_name.into(),
             device_id,
-            transport,
-        })
+            token_source,
+        }
     }
 
     /// Send a device to cloud message for this device to the IoT Hub
@@ -187,5 +196,34 @@ impl IoTHubClient {
     ///
     pub async fn ping(&mut self) -> crate::Result<()> {
         self.transport.ping().await
+    }
+}
+
+/// A builder for an IoTHubClient
+#[derive(Debug)]
+pub struct IoTHubClientBuilder<TS> {
+    hub_name: String,
+    device_id: String,
+    token_source: TS,
+}
+
+impl<TS: TokenSource + Send + Sync + Clone + 'static> IoTHubClientBuilder<TS> {
+    /// Build the IoTHubClient.
+    ///
+    /// Consumes the builder.
+    pub async fn build(self) -> crate::Result<IoTHubClient> {
+        let IoTHubClientBuilder {
+            hub_name,
+            device_id,
+            token_source,
+        } = self;
+
+        let transport =
+            ClientTransport::new(&hub_name, device_id.clone(), token_source.clone()).await?;
+
+        Ok(IoTHubClient {
+            device_id,
+            transport,
+        })
     }
 }
