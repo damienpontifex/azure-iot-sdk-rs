@@ -90,6 +90,7 @@ impl IoTHubClient {
             hub_name: hub_name.into(),
             device_id,
             token_source,
+            root_ca: None,
         }
     }
 
@@ -200,11 +201,12 @@ impl IoTHubClient {
 }
 
 /// A builder for an IoTHubClient
-#[derive(Debug)]
+#[allow(missing_debug_implementations)]
 pub struct IoTHubClientBuilder<TS> {
     hub_name: String,
     device_id: String,
     token_source: TS,
+    root_ca: Option<native_tls::Certificate>,
 }
 
 impl<TS: TokenSource + Send + Sync + Clone + 'static> IoTHubClientBuilder<TS> {
@@ -216,8 +218,14 @@ impl<TS: TokenSource + Send + Sync + Clone + 'static> IoTHubClientBuilder<TS> {
             hub_name,
             device_id,
             token_source,
+            root_ca,
         } = self;
 
+        #[cfg(not(feature = "https-transport"))]
+        let transport =
+            ClientTransport::new(&hub_name, device_id.clone(), token_source.clone(), root_ca)
+                .await?;
+        #[cfg(feature = "https-transport")]
         let transport =
             ClientTransport::new(&hub_name, device_id.clone(), token_source.clone()).await?;
 
@@ -225,5 +233,14 @@ impl<TS: TokenSource + Send + Sync + Clone + 'static> IoTHubClientBuilder<TS> {
             device_id,
             transport,
         })
+    }
+
+    /// Add a certificate to the set of roots that the client will trust
+    ///
+    /// The provided certificate must be PEM encoded
+    pub fn root_ca(mut self, root_ca: impl AsRef<[u8]>) -> crate::Result<Self> {
+        let root_ca = native_tls::Certificate::from_pem(root_ca.as_ref())?;
+        self.root_ca = Some(root_ca);
+        Ok(self)
     }
 }

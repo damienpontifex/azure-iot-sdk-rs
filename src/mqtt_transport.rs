@@ -96,17 +96,21 @@ const REQUEST_ID_PARAM: &str = "?$rid=";
 /// ```no_run
 /// // let (read_socket, write_socket) = client::connect("myiothub".to_string(), "myfirstdevice".to_string(), "SharedAccessSignature sr=myiothub.azure-devices.net%2Fdevices%2Fmyfirstdevice&sig=blahblah&se=1586909077".to_string()).await;
 /// ```
-async fn tcp_connect(iot_hub: &str) -> crate::Result<TlsStream<TcpStream>> {
+async fn tcp_connect(
+    iot_hub: &str,
+    root_ca: Option<native_tls::Certificate>,
+) -> crate::Result<TlsStream<TcpStream>> {
     let socket = TcpStream::connect((iot_hub, 8883)).await?;
 
     trace!("Connected to tcp socket {:?}", socket);
 
-    let cx = TlsConnector::from(
-        native_tls::TlsConnector::builder()
-            .min_protocol_version(Some(native_tls::Protocol::Tlsv12))
-            .build()
-            .unwrap(),
-    );
+    let mut cb = native_tls::TlsConnector::builder();
+    cb.min_protocol_version(Some(native_tls::Protocol::Tlsv12));
+    if let Some(root_ca) = root_ca {
+        cb.add_root_certificate(root_ca);
+    }
+
+    let cx = TlsConnector::from(cb.build().unwrap());
 
     let socket = cx.connect(&iot_hub, socket).await?;
 
@@ -120,8 +124,9 @@ pub(crate) async fn mqtt_connect(
     client_identifier: &str,
     username: impl ToString,
     password: impl ToString,
+    root_ca: Option<native_tls::Certificate>,
 ) -> crate::Result<TlsStream<TcpStream>> {
-    let mut socket = tcp_connect(hostname).await?;
+    let mut socket = tcp_connect(hostname, root_ca).await?;
 
     let mut conn = ConnectPacket::new(client_identifier);
     conn.set_client_identifier(client_identifier);
@@ -198,6 +203,7 @@ impl MqttTransport {
         hub_name: &str,
         device_id: String,
         token_source: TS,
+        root_ca: Option<native_tls::Certificate>,
     ) -> crate::Result<Self>
     where
         TS: TokenSource + Send + Sync + 'static,
@@ -209,7 +215,7 @@ impl MqttTransport {
         let token = token_source.get(&expiry);
         trace!("Using token {}", token);
 
-        let socket = mqtt_connect(&hub_name, &device_id, user_name, token).await?;
+        let socket = mqtt_connect(&hub_name, &device_id, user_name, token, root_ca).await?;
 
         let (read_socket, write_socket) = tokio::io::split(socket);
 

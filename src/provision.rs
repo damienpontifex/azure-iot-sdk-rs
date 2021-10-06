@@ -204,7 +204,7 @@ async fn get_iothub_from_provision_service(
     let expiry = Utc::now() + Duration::days(1);
     let expiry = expiry.timestamp();
     let sas = generate_registration_sas(scope_id, registration_id, device_key, expiry);
-    let mut socket = mqtt_connect(DPS_HOST, registration_id, username, sas).await?;
+    let mut socket = mqtt_connect(DPS_HOST, registration_id, username, sas, None).await?;
 
     let topics = vec![(
         TopicFilter::new("$dps/registrations/res/#").unwrap(),
