@@ -24,6 +24,7 @@ use tokio_native_tls::{TlsConnector, TlsStream};
 
 use async_trait::async_trait;
 
+use crate::dtmi::Dtmi;
 use crate::message::Message;
 #[cfg(any(
     feature = "direct-methods",
@@ -204,11 +205,19 @@ impl MqttTransport {
         device_id: String,
         token_source: TS,
         root_ca: Option<native_tls::Certificate>,
+        pnp_model_id: Option<Dtmi>,
     ) -> crate::Result<Self>
     where
         TS: TokenSource + Send + Sync + 'static,
     {
-        let user_name = format!("{}/{}/?api-version=2018-06-30", hub_name, device_id);
+        let user_name = if let Some(Dtmi(model_id)) = pnp_model_id {
+            format!(
+                "{}/{}/?api-version=2020-09-30&model-id={}",
+                hub_name, device_id, model_id
+            )
+        } else {
+            format!("{}/{}/?api-version=2018-06-30", hub_name, device_id)
+        };
 
         let expiry = Utc::now() + Duration::days(1);
         trace!("Generating token that will expire at {}", expiry);

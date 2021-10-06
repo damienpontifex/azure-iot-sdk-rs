@@ -1,3 +1,4 @@
+use crate::dtmi::Dtmi;
 use crate::message::Message;
 #[cfg(feature = "direct-methods")]
 use crate::DirectMethodResponse;
@@ -91,6 +92,7 @@ impl IoTHubClient {
             device_id,
             token_source,
             root_ca: None,
+            pnp_model_id: None,
         }
     }
 
@@ -207,6 +209,7 @@ pub struct IoTHubClientBuilder<TS> {
     device_id: String,
     token_source: TS,
     root_ca: Option<native_tls::Certificate>,
+    pnp_model_id: Option<Dtmi>,
 }
 
 impl<TS: TokenSource + Send + Sync + Clone + 'static> IoTHubClientBuilder<TS> {
@@ -219,12 +222,18 @@ impl<TS: TokenSource + Send + Sync + Clone + 'static> IoTHubClientBuilder<TS> {
             device_id,
             token_source,
             root_ca,
+            pnp_model_id,
         } = self;
 
         #[cfg(not(feature = "https-transport"))]
-        let transport =
-            ClientTransport::new(&hub_name, device_id.clone(), token_source.clone(), root_ca)
-                .await?;
+        let transport = ClientTransport::new(
+            &hub_name,
+            device_id.clone(),
+            token_source.clone(),
+            root_ca,
+            pnp_model_id,
+        )
+        .await?;
         #[cfg(feature = "https-transport")]
         let transport =
             ClientTransport::new(&hub_name, device_id.clone(), token_source.clone()).await?;
@@ -241,6 +250,15 @@ impl<TS: TokenSource + Send + Sync + Clone + 'static> IoTHubClientBuilder<TS> {
     pub fn root_ca(mut self, root_ca: impl AsRef<[u8]>) -> crate::Result<Self> {
         let root_ca = native_tls::Certificate::from_pem(root_ca.as_ref())?;
         self.root_ca = Some(root_ca);
+        Ok(self)
+    }
+
+    /// Provide a PNP model ID
+    ///
+    /// Is only use with MQTT transport
+    pub fn pnp_model_id(mut self, pnp_model_id: impl AsRef<str>) -> crate::Result<Self> {
+        let dtmi = pnp_model_id.as_ref().parse()?;
+        self.pnp_model_id = Some(dtmi);
         Ok(self)
     }
 }
