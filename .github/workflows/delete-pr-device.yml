@@ -14,6 +14,8 @@ jobs:
     steps:
     - name: Delete device using Azure CLI
       uses: azure/CLI@v1
+      env:
+        IOTHUB_ENTITY_CONNECTION_STRING: ${{ secrets.IOTHUB_ENTITY_CONNECTION_STRING }}
       with:
         inlineScript: |
           az extension add --name azure-iot
@@ -22,5 +24,5 @@ jobs:
             --device-id pr-${{ github.event.number }} \
             --hub-name azure-iot-sdk-rs \
             --resource-group azure-iot-sdk-rs \
-            --login "${{ secrets.IOTHUB_ENTITY_CONNECTION_STRING }}"
+            --login "${IOTHUB_ENTITY_CONNECTION_STRING}"
 
