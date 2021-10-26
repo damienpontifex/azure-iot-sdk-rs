@@ -32,13 +32,15 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v2
+
     - name: Create GitHub Release
       id: create_release
-      uses: actions/github-script@v4
+      uses: actions/github-script@v5
       with:
-        github-token: ${{ secrets.GITHUB_TOKEN }}
         script: |
-          await github.request(`POST /repos/${{ github.repository }}/releases`, {
-            tag_name: "${{ github.ref }}",
+          await github.rest.repos.createRelease({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            tag_name: context.ref,
             generate_release_notes: true
-          })
+          });
