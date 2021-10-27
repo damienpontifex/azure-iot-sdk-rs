@@ -20,7 +20,8 @@ use crate::mqtt_transport::mqtt_connect;
 
 use crate::{
     client::IoTHubClient,
-    token::{generate_token, DeviceKeyTokenSource},
+    client::IoTHubClientBuilder,
+    token::{generate_token, DeviceKeyTokenSource, TokenSource},
 };
 
 #[cfg(not(feature = "https-transport"))]
@@ -204,7 +205,7 @@ async fn get_iothub_from_provision_service(
     let expiry = Utc::now() + Duration::days(1);
     let expiry = expiry.timestamp();
     let sas = generate_registration_sas(scope_id, registration_id, device_key, expiry);
-    let mut socket = mqtt_connect(DPS_HOST, registration_id, username, sas).await?;
+    let mut socket = mqtt_connect(DPS_HOST, registration_id, username, sas, None).await?;
 
     let topics = vec![(
         TopicFilter::new("$dps/registrations/res/#").unwrap(),
@@ -342,6 +343,34 @@ impl IoTHubClient {
             token_source.clone(),
         )
         .await?;
+        Ok(client)
+    }
+
+    ///
+    #[cfg(feature = "with-provision")]
+    pub async fn builder_from_provision_service(
+        scope_id: &str,
+        device_id: String,
+        device_key: &str,
+        max_retries: i32,
+    ) -> Result<
+        IoTHubClientBuilder<impl TokenSource + Send + Sync + Clone + 'static>,
+        Box<dyn std::error::Error>,
+    > {
+        let response =
+            get_iothub_from_provision_service(scope_id, &device_id, device_key, max_retries)
+                .await?;
+
+        debug!("Provisioned to hub {:?}", response);
+
+        let token_source =
+            DeviceKeyTokenSource::new(&response.assigned_hub, &response.device_id, device_key)
+                .unwrap();
+        let client = IoTHubClient::builder(
+            &response.assigned_hub,
+            response.device_id,
+            token_source.clone(),
+        );
         Ok(client)
     }
 }
