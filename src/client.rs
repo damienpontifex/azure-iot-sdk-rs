@@ -7,7 +7,7 @@ use crate::DirectMethodResponse;
     feature = "twin-properties"
 ))]
 use crate::MessageType;
-use crate::{token::TokenSource, transport::Transport};
+use crate::{token::TokenProvider, transport::Transport};
 #[cfg(any(
     feature = "direct-methods",
     feature = "c2d-messages",
@@ -67,16 +67,14 @@ impl IoTHubClient {
     ///         IoTHubClient::new(iothub_hostname, device_id.into(), token_source).await;
     /// }
     /// ```
-    pub async fn new<TS>(
+    pub async fn new(
         hub_name: &str,
         device_id: String,
-        token_source: TS,
+        token_source: TokenProvider,
     ) -> crate::Result<IoTHubClient>
-    where
-        TS: TokenSource + Send + Sync + Clone + 'static,
     {
         let transport =
-            ClientTransport::new(hub_name, device_id.clone(), token_source.clone()).await?;
+            ClientTransport::new(hub_name, device_id.clone(), token_source).await?;
 
         Ok(Self {
             device_id,

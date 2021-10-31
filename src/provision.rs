@@ -339,7 +339,7 @@ impl IoTHubClient {
         let client = IoTHubClient::new(
             &response.assigned_hub,
             response.device_id,
-            token_source.clone(),
+            token_source.into(),
         )
         .await?;
         Ok(client)

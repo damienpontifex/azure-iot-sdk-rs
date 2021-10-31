@@ -33,7 +33,7 @@ use crate::message::Message;
 use crate::message::MessageType;
 #[cfg(feature = "direct-methods")]
 use crate::message::{DirectMethodInvocation, DirectMethodResponse};
-use crate::{token::{TokenSource, Token}, transport::Transport};
+use crate::{token::{TokenSource, TokenProvider}, transport::Transport};
 use chrono::{Duration, Utc};
 use std::sync::Arc;
 use std::convert::From;
@@ -172,7 +172,7 @@ pub(crate) async fn mqtt_connect(
 ///
 #[derive(Clone)]
 pub(crate) struct MqttTransport {
-    token_source: Token,
+    token_source: TokenProvider,
     write_socket: Arc<Mutex<WriteHalf<TlsStream<TcpStream>>>>,
     read_socket: Arc<Mutex<ReadHalf<TlsStream<TcpStream>>>>,
     d2c_topic: TopicName,
@@ -195,13 +195,11 @@ impl Drop for MqttTransport {
 }
 
 impl MqttTransport {
-    pub(crate) async fn new<TS>(
+    pub(crate) async fn new(
         hub_name: &str,
         device_id: String,
-        token_source: TS,
+        token_source: TokenProvider,
     ) -> crate::Result<Self>
-    where
-        TS: TokenSource,
     {
         let user_name = format!("{}/{}/?api-version=2018-06-30", hub_name, device_id);
 
@@ -215,7 +213,7 @@ impl MqttTransport {
         let (read_socket, write_socket) = tokio::io::split(socket);
 
         let mut mqtt_transport = Self {
-            token_source: Token::from(token_source),
+            token_source,
             write_socket: Arc::new(Mutex::new(write_socket)),
             read_socket: Arc::new(Mutex::new(read_socket)),
             d2c_topic: TopicName::new(cloud_bound_messages_topic(&device_id)).unwrap(),

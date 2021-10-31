@@ -25,15 +25,9 @@ pub trait TokenSource {
     fn get(&self, expiry: &DateTime<Utc>) -> String;
 }
 
-impl std::fmt::Debug for dyn TokenSource {
-    fn fmt(&self, _: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        unimplemented!("Only implemented by implementations of TokenSource")
-    }
-}
-
 #[enum_dispatch(TokenSource)]
-#[derive(Clone)]
-pub enum Token {
+#[derive(Debug, Clone)]
+pub enum TokenProvider {
     SasTokenSource,
     DeviceKeyTokenSource,
     UsernamePasswordTokenSource,
