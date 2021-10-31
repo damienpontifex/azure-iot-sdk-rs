@@ -37,7 +37,7 @@
 //!     ).unwrap();
 //!
 //!     let mut client =
-//!         IoTHubClient::new(iothub_hostname, device_id.into(), token_source).await?;
+//!         IoTHubClient::new(iothub_hostname, device_id.into(), token_source.into()).await?;
 //!
 //!     let mut interval = time::interval(time::Duration::from_secs(1));
 //!     let mut count: u32 = 0;
