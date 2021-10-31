@@ -2,7 +2,7 @@
 name = "azure_iot_sdk"
 version = "0.8.0"
 authors = ["Damien Pontifex <damien.pontifex@gmail.com>"]
-edition = "2018"
+edition = "2021"
 repository = "https://github.com/damienpontifex/azure-iot-sdk-rs"
 documentation = "https://docs.rs/azure_iot_sdk"
 description = "Client library for connection devices to Azure IoT Hub"
