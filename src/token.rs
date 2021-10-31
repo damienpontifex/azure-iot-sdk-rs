@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use enum_dispatch::enum_dispatch;
 use hmac::{Hmac, Mac, NewMac};
 use sha2::Sha256;
 
@@ -18,6 +19,7 @@ pub enum TokenError {
 }
 
 /// Provider for authentication
+#[enum_dispatch]
 pub trait TokenSource {
     /// Get the authentication value from the source
     fn get(&self, expiry: &DateTime<Utc>) -> String;
@@ -29,22 +31,35 @@ impl std::fmt::Debug for dyn TokenSource {
     }
 }
 
-/// Provide an existing SAS as authentication source
-#[derive(Debug, Clone)]
-pub struct SasTokenSource<'a> {
-    sas: &'a str,
+#[enum_dispatch(TokenSource)]
+#[derive(Clone)]
+pub enum Token {
+    SasTokenSource,
+    DeviceKeyTokenSource,
+    UsernamePasswordTokenSource,
 }
 
-impl<'a> SasTokenSource<'_> {
+/// Provide an existing SAS as authentication source
+#[derive(Debug, Clone)]
+pub struct SasTokenSource {
+    sas: String,
+}
+
+impl SasTokenSource {
     /// Make the token source with the given SAS
-    pub fn new(sas: &'a str) -> SasTokenSource<'_> {
-        SasTokenSource { sas }
+    pub fn new<T>(sas: T) -> SasTokenSource
+    where
+        T: ToString,
+    {
+        SasTokenSource {
+            sas: sas.to_string(),
+        }
     }
 }
 
-impl<'a> TokenSource for SasTokenSource<'_> {
+impl TokenSource for SasTokenSource {
     fn get(&self, _: &DateTime<Utc>) -> String {
-        self.sas.to_string()
+        self.sas.clone()
     }
 }
 
