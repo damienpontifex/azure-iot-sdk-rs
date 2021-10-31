@@ -12,7 +12,7 @@ fn test_config() -> (String, String, String) {
 async fn client() -> azure_iot_sdk::Result<IoTHubClient> {
     let (hostname, device_id, access_key) = test_config();
     let token_source = DeviceKeyTokenSource::new(&hostname, &device_id, &access_key).unwrap();
-    IoTHubClient::new(&hostname, device_id, token_source).await
+    IoTHubClient::new(&hostname, device_id, token_source.into()).await
 }
 
 #[tokio::test]

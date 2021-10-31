@@ -75,7 +75,7 @@ async fn main() -> azure_iot_sdk::Result<()> {
     let token_source =
         DeviceKeyTokenSource::new(&hostname, &device_id, &shared_access_key).unwrap();
 
-    let mut client = IoTHubClient::new(&hostname, device_id, token_source).await?;
+    let mut client = IoTHubClient::new(&hostname, device_id, token_source.into()).await?;
 
     info!("Initialized client");
 

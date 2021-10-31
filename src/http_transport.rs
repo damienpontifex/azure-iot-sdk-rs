@@ -7,7 +7,7 @@ use crate::message::Message;
     feature = "twin-properties"
 ))]
 use crate::message::MessageType;
-use crate::{token::TokenSource, transport::Transport};
+use crate::{token::{TokenProvider, TokenSource}, transport::Transport};
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use hyper::{client::HttpConnector, header, Body, Client, Request};
@@ -18,7 +18,7 @@ use tokio::task::JoinHandle;
 
 #[derive(Clone)]
 pub(crate) struct HttpsTransport {
-    token_source: Box<Arc<dyn TokenSource + Send + Sync + 'static>>,
+    token_source: TokenProvider,
     hub_name: String,
     device_id: String,
     client: Client<HttpsConnector<HttpConnector>>,
@@ -28,20 +28,18 @@ pub(crate) struct HttpsTransport {
 }
 
 impl HttpsTransport {
-    pub(crate) async fn new<TS>(
+    pub(crate) async fn new(
         hub_name: &str,
         device_id: String,
-        token_source: TS,
+        token_source: TokenProvider,
     ) -> crate::Result<Self>
-    where
-        TS: TokenSource + Send + Sync + 'static,
     {
         let https = HttpsConnector::new();
         let client = Client::builder().build::<_, hyper::Body>(https);
         let transport = Self {
             hub_name: hub_name.to_string(),
             device_id,
-            token_source: Box::new(Arc::new(token_source)),
+            token_source,
             client,
             ping_join_handle: None,
             token: String::new(),
