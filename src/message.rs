@@ -17,6 +17,9 @@ pub enum MessageType {
     /// Cloud updating desired properties
     #[cfg(feature = "twin-properties")]
     DesiredPropertyUpdate(Message),
+    /// Cloud sending twin response
+    #[cfg(feature = "twin-properties")]
+    TwinResponse(Message),
     /// Cloud sending a direct method invocation
     #[cfg(feature = "direct-methods")]
     DirectMethod(DirectMethodInvocation),
