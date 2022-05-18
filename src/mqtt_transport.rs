@@ -376,6 +376,10 @@ impl Transport for MqttTransport {
                     // TODO: handle ping req from server and we should send ping response in return
                     VariablePacket::PingrespPacket(..) => {
                         debug!("Receiving PINGRESP from broker ..");
+                        #[cfg(feature = "ping-response")]
+                        if handler_tx.send(MessageType::PingResponse).await.is_err() {
+                            break;
+                        };
                     }
                     VariablePacket::PublishPacket(ref publ) => {
                         let mut message = Message::new(publ.payload().to_vec());
