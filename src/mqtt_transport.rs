@@ -19,6 +19,7 @@ use tokio::net::TcpStream;
 ))]
 use tokio::sync::mpsc::{channel, Receiver};
 use tokio::sync::Mutex;
+#[cfg(feature = "automatic-ping")]
 use tokio::{task::JoinHandle, time};
 use tokio_native_tls::{TlsConnector, TlsStream};
 
@@ -179,10 +180,12 @@ pub(crate) struct MqttTransport {
     device_id: String,
     #[cfg(feature = "c2d-messages")]
     rx_topic_prefix: String,
+    #[cfg(feature = "automatic-ping")]
     ping_join_handle: Option<Arc<JoinHandle<()>>>,
     // rx_loop_handle: Option<AbortHandle>,
 }
 
+#[cfg(feature = "automatic-ping")]
 impl Drop for MqttTransport {
     fn drop(&mut self) {
         // Check to see whether we're the last instance holding the Arc and only abort the ping if so
@@ -212,7 +215,7 @@ impl MqttTransport {
 
         let (read_socket, write_socket) = tokio::io::split(socket);
 
-        let mut mqtt_transport = Self {
+        let mqtt_transport = Self {
             token_source,
             write_socket: Arc::new(Mutex::new(write_socket)),
             read_socket: Arc::new(Mutex::new(read_socket)),
@@ -220,16 +223,23 @@ impl MqttTransport {
             device_id: device_id.to_string(),
             #[cfg(feature = "c2d-messages")]
             rx_topic_prefix: device_bound_messages_topic_prefix(&device_id),
+            #[cfg(feature = "automatic-ping")]
             ping_join_handle: None,
             // rx_loop_handle: None,
         };
 
-        mqtt_transport.ping_join_handle = Some(Arc::new(mqtt_transport.ping_on_secs_interval(8)));
+        #[cfg(feature = "automatic-ping")]
+        let mut mqtt_transport = mqtt_transport;
+        #[cfg(feature = "automatic-ping")]
+        {
+            mqtt_transport.ping_join_handle = Some(Arc::new(mqtt_transport.ping_on_secs_interval(8)));
+        }
 
         Ok(mqtt_transport)
     }
 
     ///
+    #[cfg(feature = "automatic-ping")]
     fn ping_on_secs_interval(&self, ping_interval: u8) -> JoinHandle<()> {
         let mut ping_interval = time::interval(time::Duration::from_secs(ping_interval.into()));
         let mut cloned_self = self.clone();

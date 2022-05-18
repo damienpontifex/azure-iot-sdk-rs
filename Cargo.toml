@@ -17,13 +17,15 @@ default = [
   "twin-properties",
   "with-provision",
   "error-handling-messages",
-  "ping-response"
+  "ping-response",
+  "automatic-ping",
 ]
 direct-methods = []
 twin-properties = []
 c2d-messages = []
 error-handling-messages = []
 ping-response = []
+automatic-ping = []
 https-transport = ["hyper", "hyper-tls"]
 with-provision = []
 
