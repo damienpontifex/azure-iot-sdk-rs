@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use enum_dispatch::enum_dispatch;
-use hmac::{Hmac, Mac, NewMac};
+use hmac::{Hmac, Mac};
 use sha2::Sha256;
 
 const DEVICEID_KEY: &str = "DeviceId";
