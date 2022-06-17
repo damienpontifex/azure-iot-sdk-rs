@@ -1,28 +1,28 @@
-name: Delete device for PR
+# name: Delete device for PR
 
-on:
-  pull_request:
-    branches:
-    - main
-    types:
-    - closed
+# on:
+#   pull_request:
+#     branches:
+#     - main
+#     types:
+#     - closed
 
-jobs:
-  create-iot-hub-device:
-    name: Delete PR IoT Device
-    runs-on: ubuntu-latest
-    steps:
-    - name: Delete device using Azure CLI
-      uses: azure/CLI@v1
-      env:
-        IOTHUB_ENTITY_CONNECTION_STRING: ${{ secrets.IOTHUB_ENTITY_CONNECTION_STRING }}
-      with:
-        inlineScript: |
-          az extension add --name azure-iot
+# jobs:
+#   create-iot-hub-device:
+#     name: Delete PR IoT Device
+#     runs-on: ubuntu-latest
+#     steps:
+#     - name: Delete device using Azure CLI
+#       uses: azure/CLI@v1
+#       env:
+#         IOTHUB_ENTITY_CONNECTION_STRING: ${{ secrets.IOTHUB_ENTITY_CONNECTION_STRING }}
+#       with:
+#         inlineScript: |
+#           az extension add --name azure-iot
 
-          az iot hub device-identity delete \
-            --device-id pr-${{ github.event.number }} \
-            --hub-name azure-iot-sdk-rs \
-            --resource-group azure-iot-sdk-rs \
-            --login "${IOTHUB_ENTITY_CONNECTION_STRING}"
+#           az iot hub device-identity delete \
+#             --device-id pr-${{ github.event.number }} \
+#             --hub-name azure-iot-sdk-rs \
+#             --resource-group azure-iot-sdk-rs \
+#             --login "${IOTHUB_ENTITY_CONNECTION_STRING}"
 
