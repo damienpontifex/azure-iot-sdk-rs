@@ -8,6 +8,7 @@ use std::collections::HashMap;
     feature = "c2d-messages",
     feature = "twin-properties",
     feature = "error-handling-messages",
+    feature = "ping-response",
 ))]
 #[derive(Debug)]
 pub enum MessageType {
@@ -23,6 +24,9 @@ pub enum MessageType {
     /// Error occurred in the message loop
     #[cfg(feature = "error-handling-messages")]
     ErrorReceive(VariablePacketError),
+    /// Cloud responded to a ping
+    #[cfg(feature = "ping-response")]
+    PingResponse,
 }
 
 /// Instance to respond to a direct method invocation
