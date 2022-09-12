@@ -1,7 +1,6 @@
 #[cfg(not(feature = "https-transport"))]
 use std::collections::HashMap;
 
-use chrono::{Duration, Utc};
 #[cfg(feature = "https-transport")]
 use hyper::{header, Body, Client, Method, Request, StatusCode};
 #[cfg(feature = "https-transport")]
@@ -33,7 +32,7 @@ fn generate_registration_sas(
     scope: &str,
     device_id: &str,
     device_key: &str,
-    expiry_timestamp: i64,
+    expiry_timestamp: u64,
 ) -> String {
     let to_sign = format!(
         "{scope}%2fregistrations%2f{device_id}\n{expires}",
@@ -197,12 +196,14 @@ async fn get_iothub_from_provision_service(
     device_key: &str,
     max_retries: i32,
 ) -> Result<ProvisionedResponse, Box<dyn std::error::Error>> {
+    use std::time::{SystemTime, Duration};
+
     let username = format!(
         "{}/registrations/{}/{}",
         scope_id, registration_id, DPS_API_VERSION
     );
-    let expiry = Utc::now() + Duration::days(1);
-    let expiry = expiry.timestamp();
+    let expiry = SystemTime::now() + Duration::from_secs(60 * 60 * 24);
+    let expiry = expiry.duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_secs();
     let sas = generate_registration_sas(scope_id, registration_id, device_key, expiry);
     let mut socket = mqtt_connect(DPS_HOST, registration_id, username, sas).await?;
 

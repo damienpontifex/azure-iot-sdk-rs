@@ -34,9 +34,10 @@ use crate::message::MessageType;
 #[cfg(feature = "direct-methods")]
 use crate::message::{DirectMethodInvocation, DirectMethodResponse};
 use crate::{token::{TokenSource, TokenProvider}, transport::Transport};
-use chrono::{Duration, Utc};
 use std::sync::Arc;
 use std::convert::From;
+use std::time::Duration;
+use std::time::SystemTime;
 
 // Incoming topic names
 #[cfg(feature = "direct-methods")]
@@ -203,8 +204,8 @@ impl MqttTransport {
     {
         let user_name = format!("{}/{}/?api-version=2018-06-30", hub_name, device_id);
 
-        let expiry = Utc::now() + Duration::days(1);
-        trace!("Generating token that will expire at {}", expiry);
+        let expiry = SystemTime::now() + Duration::from_secs(60 * 60 * 24);
+        trace!("Generating token that will expire at {:?}", expiry);
         let token = token_source.get(&expiry);
         trace!("Using token {}", token);
 
