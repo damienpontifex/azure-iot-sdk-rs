@@ -21,9 +21,8 @@ async fn main() -> azure_iot_sdk::Result<()> {
 
     let mut recv = client.get_receiver().await;
     while let Some(msg) = recv.recv().await {
-        match msg {
-            MessageType::C2DMessage(msg) => info!("Received message {:?}", msg),
-            _ => {}
+        if let MessageType::C2DMessage(msg) = msg {
+            info!("Received message {:?}", msg)
         }
     }
 
