@@ -109,7 +109,7 @@ async fn tcp_connect(iot_hub: &str) -> crate::Result<TlsStream<TcpStream>> {
             .unwrap(),
     );
 
-    let socket = cx.connect(&iot_hub, socket).await?;
+    let socket = cx.connect(iot_hub, socket).await?;
 
     trace!("Connected tls context {:?}", cx);
 
@@ -172,7 +172,6 @@ pub(crate) async fn mqtt_connect(
 ///
 #[derive(Clone)]
 pub(crate) struct MqttTransport {
-    token_source: TokenProvider,
     write_socket: Arc<Mutex<WriteHalf<TlsStream<TcpStream>>>>,
     read_socket: Arc<Mutex<ReadHalf<TlsStream<TcpStream>>>>,
     d2c_topic: TopicName,
@@ -208,12 +207,11 @@ impl MqttTransport {
         let token = token_source.get(&expiry);
         trace!("Using token {}", token);
 
-        let socket = mqtt_connect(&hub_name, &device_id, user_name, token).await?;
+        let socket = mqtt_connect(hub_name, &device_id, user_name, token).await?;
 
         let (read_socket, write_socket) = tokio::io::split(socket);
 
         let mut mqtt_transport = Self {
-            token_source,
             write_socket: Arc::new(Mutex::new(write_socket)),
             read_socket: Arc::new(Mutex::new(read_socket)),
             d2c_topic: TopicName::new(cloud_bound_messages_topic(&device_id)).unwrap(),
@@ -265,7 +263,7 @@ impl Transport for MqttTransport {
     async fn send_property_update(&mut self, request_id: &str, body: &str) -> crate::Result<()> {
         trace!("Publishing twin properties with rid = {}", request_id);
         let packet = PublishPacket::new(
-            TopicName::new(twin_update_topic(&request_id)).unwrap(),
+            TopicName::new(twin_update_topic(request_id)).unwrap(),
             QoSWithPacketIdentifier::Level0,
             body.as_bytes(),
         );
@@ -286,7 +284,7 @@ impl Transport for MqttTransport {
             request_id
         );
         let packet = PublishPacket::new(
-            TopicName::new(twin_get_topic(&request_id)).unwrap(),
+            TopicName::new(twin_get_topic(request_id)).unwrap(),
             QoSWithPacketIdentifier::Level0,
             "".as_bytes(),
         );
@@ -557,7 +555,7 @@ fn build_topic_name(
     let encoded = form_urlencoded::Serializer::new(String::new())
         .extend_pairs(props.iter())
         .finish();
-    TopicName::new(format!("{}{}", base_topic.to_string(), encoded))
+    TopicName::new(format!("{}{}", &***base_topic, encoded))
 }
 
 #[cfg(test)]

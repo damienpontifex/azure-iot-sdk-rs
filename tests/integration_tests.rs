@@ -3,7 +3,8 @@ use std::env;
 
 fn test_config() -> (String, String, String) {
     (
-        env::var("IOTHUB_HOSTNAME").unwrap_or("azure-iot-sdk-rs.azure-devices.net".to_string()),
+        env::var("IOTHUB_HOSTNAME")
+            .unwrap_or_else(|_| "azure-iot-sdk-rs.azure-devices.net".to_string()),
         env::var("IOT_DEVICE_ID").unwrap(),
         env::var("IOT_DEVICE_ACCESS_KEY").unwrap(),
     )
