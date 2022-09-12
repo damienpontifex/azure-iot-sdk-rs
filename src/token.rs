@@ -1,4 +1,5 @@
-use chrono::{DateTime, Utc};
+use std::time::SystemTime;
+
 use enum_dispatch::enum_dispatch;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
@@ -22,7 +23,7 @@ pub enum TokenError {
 #[enum_dispatch]
 pub trait TokenSource {
     /// Get the authentication value from the source
-    fn get(&self, expiry: &DateTime<Utc>) -> String;
+    fn get(&self, expiry: &SystemTime) -> String;
 }
 
 #[enum_dispatch(TokenSource)]
@@ -52,7 +53,7 @@ impl SasTokenSource {
 }
 
 impl TokenSource for SasTokenSource {
-    fn get(&self, _: &DateTime<Utc>) -> String {
+    fn get(&self, _: &SystemTime) -> String {
         self.sas.clone()
     }
 }
@@ -112,8 +113,8 @@ impl DeviceKeyTokenSource {
 }
 
 impl TokenSource for DeviceKeyTokenSource {
-    fn get(&self, expiry: &DateTime<Utc>) -> String {
-        let expiry_timestamp = expiry.timestamp();
+    fn get(&self, expiry: &SystemTime) -> String {
+        let expiry_timestamp = expiry.duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_secs();
 
         let to_sign = format!("{}\n{}", &self.resource_uri, expiry_timestamp);
 
@@ -137,7 +138,7 @@ pub struct UsernamePasswordTokenSource {
 }
 
 impl TokenSource for UsernamePasswordTokenSource {
-    fn get(&self, _expiry: &DateTime<Utc>) -> String {
+    fn get(&self, _expiry: &SystemTime) -> String {
         self.password.clone()
     }
 }
@@ -156,15 +157,16 @@ pub(crate) fn generate_token(key: &str, message: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
-    use chrono::prelude::*;
 
     #[test]
     fn test_sas_source() {
         // Should pass value through unchanged
         let sas_token_source = SasTokenSource::new("MySasString");
-        assert_eq!(sas_token_source.get(&Utc::now()), "MySasString".to_string());
+        assert_eq!(sas_token_source.get(&SystemTime::now()), "MySasString".to_string());
     }
 
     #[test]
@@ -175,7 +177,7 @@ mod tests {
             "O+H9VTcdJP0TQkl7bh4nVG0OJNrEataMpuWB54D0VEc=",
         )
         .unwrap();
-        let expiry = Utc.ymd(2020, 6, 28).and_hms(14, 08, 25);
+        let expiry = SystemTime::UNIX_EPOCH + Duration::from_secs(1593353305);
         assert_eq!(key_source.get(&expiry), "SharedAccessSignature sr=pontifex.azure-devices.net%2Fdevices%2FFirstDevice&sig=CKYVArtLm72J2UNWLb4V3XqPc679Ig3LX83G3nPExUc%3D&se=1593353305");
     }
 }
