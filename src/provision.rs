@@ -204,7 +204,8 @@ async fn get_iothub_from_provision_service(
     let expiry = Utc::now() + Duration::days(1);
     let expiry = expiry.timestamp();
     let sas = generate_registration_sas(scope_id, registration_id, device_key, expiry);
-    let mut socket = mqtt_connect(DPS_HOST, registration_id, username, sas).await?;
+    let mut buf = Vec::new();
+    let mut socket = mqtt_connect(&mut buf, DPS_HOST, registration_id, username, sas).await?;
 
     let topics = vec![(
         TopicFilter::new("$dps/registrations/res/#").unwrap(),
@@ -214,9 +215,9 @@ async fn get_iothub_from_provision_service(
     debug!("Subscribing to {:?}", topics);
 
     let subscribe_packet = SubscribePacket::new(10, topics);
-    let mut buf = Vec::new();
+    buf.clear();
     subscribe_packet.encode(&mut buf).unwrap();
-    socket.write_all(&buf[..]).await.unwrap();
+    socket.write_all(&buf).await.unwrap();
 
     let register_topic = TopicName::new(format!(
         "$dps/registrations/PUT/iotdps-register/?$rid={request_id}",
@@ -232,10 +233,10 @@ async fn get_iothub_from_provision_service(
         QoSWithPacketIdentifier::Level0,
         device_registration.to_string(),
     );
-    let mut buf = Vec::new();
+    buf.clear();
     publish_packet.encode(&mut buf).unwrap();
 
-    socket.write_all(&buf[..]).await.unwrap();
+    socket.write_all(&buf).await.unwrap();
 
     loop {
         let mut retries = 0;
@@ -283,10 +284,10 @@ async fn get_iothub_from_provision_service(
                 let topic_name = TopicName::new(format!("$dps/registrations/GET/iotdps-get-operationstatus/?$rid={request_id}&operationId={operation_id}", request_id = 1, operation_id = operation_id)).unwrap();
                 let publish_packet =
                     PublishPacket::new(topic_name, QoSWithPacketIdentifier::Level0, "");
-                let mut buf = Vec::new();
+                buf.clear();
                 publish_packet.encode(&mut buf).unwrap();
 
-                socket.write_all(&buf[..]).await.unwrap();
+                socket.write_all(&buf).await.unwrap();
             }
         }
     }
