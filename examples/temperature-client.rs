@@ -100,6 +100,9 @@ async fn main() -> azure_iot_sdk::Result<()> {
                     MessageType::DesiredPropertyUpdate(msg) => {
                         info!("Desired properties updated {:?}", msg)
                     }
+                    MessageType::TwinResponse(msg) => {
+                        info!("Twin response: {:?}", msg)
+                    }
                     MessageType::ErrorReceive(err) => error!("Error during receive {:?}", err),
                 }
             }
