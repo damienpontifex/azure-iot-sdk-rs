@@ -10,8 +10,6 @@ use crate::message::MessageType;
 use crate::{token::{TokenProvider, TokenSource}, transport::Transport};
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
-use hyper::{client::HttpConnector, header, Body, Client, Request};
-use hyper_tls::HttpsConnector;
 use std::sync::Arc;
 use tokio::sync::mpsc::Receiver;
 use tokio::task::JoinHandle;
@@ -21,7 +19,7 @@ pub(crate) struct HttpsTransport {
     token_source: TokenProvider,
     hub_name: String,
     device_id: String,
-    client: Client<HttpsConnector<HttpConnector>>,
+    pub(crate) client: reqwest::Client,
     ping_join_handle: Option<Arc<JoinHandle<()>>>,
     token: String,
     token_expiration: Option<DateTime<Utc>>,
@@ -34,13 +32,11 @@ impl HttpsTransport {
         token_source: TokenProvider,
     ) -> crate::Result<Self>
     {
-        let https = HttpsConnector::new();
-        let client = Client::builder().build::<_, hyper::Body>(https);
         let transport = Self {
             hub_name: hub_name.to_string(),
             device_id,
             token_source,
-            client,
+            client: reqwest::Client::new(),
             ping_join_handle: None,
             token: String::new(),
             token_expiration: None,
@@ -101,16 +97,15 @@ impl Drop for HttpsTransport {
 impl Transport for HttpsTransport {
     ///
     async fn send_message(&mut self, message: Message) -> crate::Result<()> {
-        let req = Request::post(format!(
+        let req = self.client.post(format!(
             "https://{}/devices/{}/messages/events?api-version=2019-03-30",
             self.hub_name, self.device_id
         ))
-        .header(header::CONTENT_TYPE, "application/json")
-        .header(header::AUTHORIZATION, self.get_token())
-        .body(Body::from(message.body))
-        .unwrap();
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .header(reqwest::header::AUTHORIZATION, self.get_token())
+        .body(message.body);
 
-        match self.client.request(req).await {
+        match req.send().await {
             Ok(res) => {
                 debug!("Response: {:?}", res);
                 Ok(())
