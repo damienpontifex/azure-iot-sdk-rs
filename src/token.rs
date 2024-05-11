@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use enum_dispatch::enum_dispatch;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
+use base64::prelude::{Engine as _, BASE64_STANDARD};
 
 const DEVICEID_KEY: &str = "DeviceId";
 const HOSTNAME_KEY: &str = "HostName";
@@ -68,7 +69,7 @@ impl DeviceKeyTokenSource {
     /// Make the source from the devices individual details
     pub fn new(hub: &str, device_id: &str, key: &str) -> Result<DeviceKeyTokenSource, TokenError> {
         // Verify key is base64
-        let b64_key = base64::decode(&key).map_err(|_| TokenError::InvalidKeyFormat)?;
+        let b64_key = BASE64_STANDARD.decode(&key).map_err(|_| TokenError::InvalidKeyFormat)?;
         // Verify key is the right length for Hmac
         Hmac::<Sha256>::new_from_slice(&b64_key).map_err(|_| TokenError::InvalidKeyLength)?;
 
@@ -144,11 +145,11 @@ impl TokenSource for UsernamePasswordTokenSource {
 
 pub(crate) fn generate_token(key: &str, message: &str) -> String {
     // Checked base64 and hmac in new so should be safe to unwrap here
-    let key = base64::decode(&key).unwrap();
+    let key = BASE64_STANDARD.decode(&key).unwrap();
     let mut mac = Hmac::<Sha256>::new_from_slice(&key).unwrap();
     mac.update(message.as_bytes());
     let mac_result = mac.finalize();
-    let signature = base64::encode(mac_result.into_bytes());
+    let signature = BASE64_STANDARD.encode(mac_result.into_bytes());
 
     let pairs = &vec![("sig", signature)];
     serde_urlencoded::to_string(pairs).unwrap()
@@ -175,7 +176,7 @@ mod tests {
             "O+H9VTcdJP0TQkl7bh4nVG0OJNrEataMpuWB54D0VEc=",
         )
         .unwrap();
-        let expiry = Utc.ymd(2020, 6, 28).and_hms(14, 08, 25);
+        let expiry = Utc.with_ymd_and_hms(2020, 6, 28, 14, 08, 25).unwrap();
         assert_eq!(key_source.get(&expiry), "SharedAccessSignature sr=pontifex.azure-devices.net%2Fdevices%2FFirstDevice&sig=CKYVArtLm72J2UNWLb4V3XqPc679Ig3LX83G3nPExUc%3D&se=1593353305");
     }
 }
