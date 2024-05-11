@@ -2,10 +2,6 @@
 use std::collections::HashMap;
 
 use chrono::{Duration, Utc};
-#[cfg(feature = "https-transport")]
-use hyper::{header, Body, Client, Method, Request, StatusCode};
-#[cfg(feature = "https-transport")]
-use hyper_tls::HttpsConnector;
 
 #[cfg(not(feature = "https-transport"))]
 use mqtt::{
@@ -112,18 +108,15 @@ async fn get_iothub_from_provision_service(
     let body = serde_json::json!({
         "registrationId": registration_id,
     });
-    let req = Request::builder()
-        .method(Method::PUT)
-        .uri(&url)
-        .header(header::CONTENT_TYPE, "application/json")
-        .header(header::AUTHORIZATION, sas.clone())
-        .body(Body::from(body.to_string()))?;
+    let client = reqwest::Client::new();
+    let req = client.put(&url)
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .header(reqwest::header::AUTHORIZATION, sas.clone())
+        .body(body.to_string());
     debug!("Request body {}", body);
-    let https = HttpsConnector::new();
-    let client = Client::builder().build::<_, hyper::Body>(https);
-    let res = client.request(req).await?;
-    if res.status() != StatusCode::ACCEPTED {
-        let body = hyper::body::to_bytes(res).await.unwrap();
+    let res = req.send().await?;
+    if res.status() != reqwest::StatusCode::ACCEPTED {
+        let body = res.bytes().await;
         error!("Rejection {:#?}", body);
         return Err(Box::new(ErrorKind::AzureProvisioningRejectedRequest));
     }
@@ -131,13 +124,13 @@ async fn get_iothub_from_provision_service(
     // Extract retry-after response header for delay duration or default to 3s
     let retry_after = std::time::Duration::from_secs(
         res.headers()
-            .get(header::RETRY_AFTER)
+            .get(reqwest::header::RETRY_AFTER)
             .and_then(|h| h.to_str().ok())
             .and_then(|h| h.parse().ok())
             .unwrap_or(3),
     );
 
-    let body = hyper::body::to_bytes(res).await.unwrap();
+    let body = res.bytes().await.unwrap();
     let reply: serde_json::Map<String, serde_json::Value> = serde_json::from_slice(&body).unwrap();
     if !reply.contains_key("operationId") {
         return Err(Box::new(ErrorKind::ProvisionRequestReplyMissingOperationId));
@@ -155,15 +148,13 @@ async fn get_iothub_from_provision_service(
     for _ in 0..max_retries {
         tokio::time::sleep(retry_after).await;
 
-        let req = Request::builder()
-            .method(Method::GET)
-            .uri(&url)
-            .header(header::CONTENT_TYPE, "application/json")
-            .header(header::AUTHORIZATION, sas.clone())
-            .body(Body::empty())?;
-        let res = client.request(req).await?;
-        if res.status() == StatusCode::OK {
-            let body = hyper::body::to_bytes(res).await.unwrap();
+        let req = client.get(&url)
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .header(reqwest::header::AUTHORIZATION, sas.clone())
+            .body("");
+        let res = req.send().await?;
+        if res.status() == reqwest::StatusCode::OK {
+            let body = res.bytes().await.unwrap();
             let reply: serde_json::Map<String, serde_json::Value> =
                 serde_json::from_slice(&body).unwrap();
             let registration_state = reply["registrationState"].as_object().unwrap();
