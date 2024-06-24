@@ -81,7 +81,8 @@ fn cloud_bound_messages_topic(device_id: &str) -> String {
     format!("devices/{}/messages/events/", device_id)
 }
 
-const KEEP_ALIVE: u16 = 10;
+const KEEP_ALIVE: u16 = 240;
+const PING_INTERVAL: u8 = 220;
 #[cfg(feature = "direct-methods")]
 const REQUEST_ID_PARAM: &str = "?$rid=";
 
@@ -224,7 +225,9 @@ impl MqttTransport {
             // rx_loop_handle: None,
         };
 
-        mqtt_transport.ping_join_handle = Some(Arc::new(mqtt_transport.ping_on_secs_interval(8)));
+        mqtt_transport.ping_join_handle = Some(Arc::new(
+            mqtt_transport.ping_on_secs_interval(PING_INTERVAL),
+        ));
 
         Ok(mqtt_transport)
     }
@@ -234,6 +237,9 @@ impl MqttTransport {
         let mut ping_interval = time::interval(time::Duration::from_secs(ping_interval.into()));
         let mut cloned_self = self.clone();
         tokio::spawn(async move {
+            // Skip the first tick, because it is defined to trigger
+            // immediately, which we don't want.
+            ping_interval.tick().await;
             loop {
                 ping_interval.tick().await;
 
