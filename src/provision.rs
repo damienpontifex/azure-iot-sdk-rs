@@ -109,7 +109,8 @@ async fn get_iothub_from_provision_service(
         "registrationId": registration_id,
     });
     let client = reqwest::Client::new();
-    let req = client.put(&url)
+    let req = client
+        .put(&url)
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .header(reqwest::header::AUTHORIZATION, sas.clone())
         .body(body.to_string());
@@ -148,7 +149,8 @@ async fn get_iothub_from_provision_service(
     for _ in 0..max_retries {
         tokio::time::sleep(retry_after).await;
 
-        let req = client.get(&url)
+        let req = client
+            .get(&url)
             .header(reqwest::header::CONTENT_TYPE, "application/json")
             .header(reqwest::header::AUTHORIZATION, sas.clone())
             .body("");

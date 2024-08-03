@@ -1,8 +1,8 @@
+use base64::prelude::{Engine as _, BASE64_STANDARD};
 use chrono::{DateTime, Utc};
 use enum_dispatch::enum_dispatch;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
-use base64::prelude::{Engine as _, BASE64_STANDARD};
 
 const DEVICEID_KEY: &str = "DeviceId";
 const HOSTNAME_KEY: &str = "HostName";
@@ -69,7 +69,9 @@ impl DeviceKeyTokenSource {
     /// Make the source from the devices individual details
     pub fn new(hub: &str, device_id: &str, key: &str) -> Result<DeviceKeyTokenSource, TokenError> {
         // Verify key is base64
-        let b64_key = BASE64_STANDARD.decode(&key).map_err(|_| TokenError::InvalidKeyFormat)?;
+        let b64_key = BASE64_STANDARD
+            .decode(&key)
+            .map_err(|_| TokenError::InvalidKeyFormat)?;
         // Verify key is the right length for Hmac
         Hmac::<Sha256>::new_from_slice(&b64_key).map_err(|_| TokenError::InvalidKeyLength)?;
 
