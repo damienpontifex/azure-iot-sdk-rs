@@ -24,6 +24,9 @@ jobs:
           toolchain: stable
           components: rustfmt, clippy
 
+      - name: Fmt check
+        run: cargo fmt --all -- --check
+
       - name: Release build (default features)
         run: cargo build --release
 
