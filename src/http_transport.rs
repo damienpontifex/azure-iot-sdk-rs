@@ -7,7 +7,10 @@ use crate::message::Message;
     feature = "twin-properties"
 ))]
 use crate::message::MessageType;
-use crate::{token::{TokenProvider, TokenSource}, transport::Transport};
+use crate::{
+    token::{TokenProvider, TokenSource},
+    transport::Transport,
+};
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use std::sync::Arc;
@@ -30,8 +33,7 @@ impl HttpsTransport {
         hub_name: &str,
         device_id: String,
         token_source: TokenProvider,
-    ) -> crate::Result<Self>
-    {
+    ) -> crate::Result<Self> {
         let transport = Self {
             hub_name: hub_name.to_string(),
             device_id,
@@ -97,13 +99,15 @@ impl Drop for HttpsTransport {
 impl Transport for HttpsTransport {
     ///
     async fn send_message(&mut self, message: Message) -> crate::Result<()> {
-        let req = self.client.post(format!(
-            "https://{}/devices/{}/messages/events?api-version=2019-03-30",
-            self.hub_name, self.device_id
-        ))
-        .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .header(reqwest::header::AUTHORIZATION, self.get_token())
-        .body(message.body);
+        let req = self
+            .client
+            .post(format!(
+                "https://{}/devices/{}/messages/events?api-version=2019-03-30",
+                self.hub_name, self.device_id
+            ))
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .header(reqwest::header::AUTHORIZATION, self.get_token())
+            .body(message.body);
 
         match req.send().await {
             Ok(res) => {

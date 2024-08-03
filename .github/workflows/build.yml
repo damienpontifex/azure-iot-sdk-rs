@@ -3,10 +3,10 @@ name: CI
 on:
   push:
     branches:
-    - main
+      - main
   pull_request:
     branches:
-    - main
+      - main
 
 jobs:
   build:
@@ -14,53 +14,52 @@ jobs:
     env:
       IOT_DEVICE_ID: pr-${{ github.event.number }}
     steps:
-    - name: Checkout
-      uses: actions/checkout@v2
+      - name: Checkout
+        uses: actions/checkout@v2
 
-    - name: Stable with rustfmt and clippy
-      uses: actions-rs/toolchain@v1
-      with:
-        profile: minimal
-        toolchain: stable
-        components: rustfmt, clippy
+      - name: Stable with rustfmt and clippy
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          components: rustfmt, clippy
 
-    - name: Release build (default features)
-      run: cargo build --release
+      - name: Fmt check
+        run: cargo fmt --all -- --check
 
-    - name: Release build (https transport)
-      run: cargo build --release --features https-transport
+      - name: Clippy check
+        run: clippy --all -- -D warnings
 
-    - name: Tests
-      if: github.event_name != 'pull_request'
-      run: |
-        cargo test --doc --release --all-features
-        cargo test --lib --release --all-features
+      - name: Release build (default features)
+        run: cargo build --release
 
-    # - name: Lookup PR device details
-    #   uses: azure/CLI@v1
-    #   if: github.event_name == 'pull_request'
-    #   with:
-    #     inlineScript: |
-    #       az extension add --name azure-iot
+      - name: Release build (https transport)
+        run: cargo build --release --features https-transport
 
-    #       PRIMARY_KEY=$(az iot hub device-identity show \
-    #         --device-id "${IOT_DEVICE_ID}" \
-    #         --hub-name azure-iot-sdk-rs \
-    #         --resource-group azure-iot-sdk-rs \
-    #         --login "${{ secrets.IOTHUB_ENTITY_CONNECTION_STRING }}" \
-    #         --output json | jq --raw-output '.authentication.symmetricKey.primaryKey')
+      - name: Tests
+        if: github.event_name != 'pull_request'
+        run: |
+          cargo test --doc --release --all-features
+          cargo test --lib --release --all-features
 
-    #       # Set these environment variables needed for integration test
-    #       echo "IOT_DEVICE_ACCESS_KEY=${PRIMARY_KEY}" >> $GITHUB_ENV
+      # - name: Lookup PR device details
+      #   uses: azure/CLI@v1
+      #   if: github.event_name == 'pull_request'
+      #   with:
+      #     inlineScript: |
+      #       az extension add --name azure-iot
 
-    # - name: Integration tests
-    #   if: github.event_name == 'pull_request'
-    #   run: |
-    #     cargo test --release
+      #       PRIMARY_KEY=$(az iot hub device-identity show \
+      #         --device-id "${IOT_DEVICE_ID}" \
+      #         --hub-name azure-iot-sdk-rs \
+      #         --resource-group azure-iot-sdk-rs \
+      #         --login "${{ secrets.IOTHUB_ENTITY_CONNECTION_STRING }}" \
+      #         --output json | jq --raw-output '.authentication.symmetricKey.primaryKey')
 
-    - name: Annotate commit with clippy warnings
-      uses: actions-rs/clippy-check@v1
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        args: --all-features
+      #       # Set these environment variables needed for integration test
+      #       echo "IOT_DEVICE_ACCESS_KEY=${PRIMARY_KEY}" >> $GITHUB_ENV
 
+      # - name: Integration tests
+      #   if: github.event_name == 'pull_request'
+      #   run: |
+      #     cargo test --release
