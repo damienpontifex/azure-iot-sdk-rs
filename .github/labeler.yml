@@ -1,14 +1,14 @@
 workflows:
-- .github/**/*
+  - .github/**/*
 
 examples:
-- examples/**/*
+  - examples/**/*
 
 tests:
-- tests/**/*
+  - tests/**/*
 
 client:
-- src/**/*
+  - src/**/*
 
 dependencies:
-- all: ['Cargo.toml', 'Cargo.lock']
+  - all: ["Cargo.toml", "Cargo.lock"]
