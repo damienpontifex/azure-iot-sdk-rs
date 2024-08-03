@@ -26,8 +26,11 @@ pub trait TokenSource {
     fn get(&self, expiry: &DateTime<Utc>) -> String;
 }
 
+#[allow(missing_docs)]
 #[enum_dispatch(TokenSource)]
 #[derive(Debug, Clone)]
+/// The `TokenProvider` allows to use different implementation
+/// of the token source.
 pub enum TokenProvider {
     SasTokenSource,
     DeviceKeyTokenSource,
@@ -135,7 +138,10 @@ impl TokenSource for DeviceKeyTokenSource {
 /// to implement an IoT Plug-n-Play device))
 #[derive(Debug, Clone)]
 pub struct UsernamePasswordTokenSource {
+    /// username is not used
+    #[allow(dead_code)]
     username: String,
+    /// mqtt password
     password: String,
 }
 

@@ -175,6 +175,7 @@ pub(crate) async fn mqtt_connect(
 ///
 #[derive(Clone)]
 pub(crate) struct MqttTransport {
+    #[allow(dead_code)]
     token_source: TokenProvider,
     write_socket: Arc<Mutex<WriteHalf<TlsStream<TcpStream>>>>,
     read_socket: Arc<Mutex<ReadHalf<TlsStream<TcpStream>>>>,
