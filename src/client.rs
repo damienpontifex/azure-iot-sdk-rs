@@ -71,8 +71,7 @@ impl IoTHubClient {
         hub_name: impl AsRef<str>,
         device_id: String,
         token_source: TokenProvider,
-    ) -> crate::Result<IoTHubClient>
-    {
+    ) -> crate::Result<IoTHubClient> {
         let transport =
             ClientTransport::new(hub_name.as_ref(), device_id.clone(), token_source).await?;
 

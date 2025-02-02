@@ -67,8 +67,9 @@ extern crate log;
 /// IoT SDK package version
 pub const SDK_VERSION: &str = std::env!("CARGO_PKG_VERSION");
 
-/// The IoT Hub client
 pub mod client;
+/// The IoT Hub client
+pub mod client_builder;
 pub use client::*;
 
 // #[cfg(feature = "http-transport")]

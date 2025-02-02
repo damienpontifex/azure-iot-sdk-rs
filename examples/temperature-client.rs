@@ -1,6 +1,4 @@
-use azure_iot_sdk::{
-    DeviceKeyTokenSource, DirectMethodResponse, IoTHubClient, Message, MessageType,
-};
+use azure_iot_sdk::{DirectMethodResponse, IoTHubClient, Message, MessageType};
 use chrono::{DateTime, Utc};
 use log::{error, info};
 use rand_distr::{Distribution, Normal};
@@ -62,7 +60,7 @@ impl HumiditySensor {
 }
 
 #[tokio::main]
-async fn main() -> azure_iot_sdk::Result<()> {
+async fn main() -> anyhow::Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     let hostname = std::env::var("IOTHUB_HOSTNAME")
@@ -72,10 +70,11 @@ async fn main() -> azure_iot_sdk::Result<()> {
     let shared_access_key = std::env::var("SHARED_ACCESS_KEY")
         .expect("Set the device shared access key in the SHARED_ACCESS_KEY environment variable");
 
-    let token_source =
-        DeviceKeyTokenSource::new(&hostname, &device_id, &shared_access_key).unwrap();
-
-    let mut client = IoTHubClient::new(&hostname, device_id, token_source.into()).await?;
+    let mut client = IoTHubClient::builder()
+        .iothub_details(hostname, device_id)
+        .access_key(shared_access_key)?
+        .build()
+        .await?;
 
     info!("Initialized client");
 
