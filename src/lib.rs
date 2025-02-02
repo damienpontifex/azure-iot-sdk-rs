@@ -70,6 +70,7 @@ pub const SDK_VERSION: &str = std::env!("CARGO_PKG_VERSION");
 pub mod client;
 /// The IoT Hub client
 pub mod client_builder;
+pub mod error;
 pub use client::*;
 
 // #[cfg(feature = "http-transport")]
@@ -94,4 +95,4 @@ pub mod transport;
 pub mod provision;
 
 /// Convenience type alias for `std::result::Result<T, Box<dyn std::error::Error>>`
-pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+pub type Result<T> = std::result::Result<T, crate::error::IoTHubError>;

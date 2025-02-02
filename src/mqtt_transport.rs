@@ -33,10 +33,13 @@ use crate::message::Message;
 use crate::message::MessageType;
 #[cfg(feature = "direct-methods")]
 use crate::message::{DirectMethodInvocation, DirectMethodResponse};
-use crate::{token::{TokenSource, TokenProvider}, transport::Transport};
+use crate::{
+    token::{TokenProvider, TokenSource},
+    transport::Transport,
+};
 use chrono::{Duration, Utc};
-use std::sync::Arc;
 use std::convert::From;
+use std::sync::Arc;
 
 // Incoming topic names
 #[cfg(feature = "direct-methods")]
@@ -142,19 +145,22 @@ pub(crate) async fn mqtt_connect(
         //TODO: Enum error type instead of strings
         Ok(VariablePacket::ConnackPacket(connack)) => {
             if connack.connect_return_code() != ConnectReturnCode::ConnectionAccepted {
-                Err(format!(
+                Err(crate::error::IoTHubError::Other(format!(
                     "Failed to connect to server, return code {:?}",
                     connack.connect_return_code()
-                ))
+                )))
             } else {
                 Ok(())
             }
         }
-        Ok(pck) => Err(format!(
+        Ok(pck) => Err(crate::error::IoTHubError::Other(format!(
             "Unexpected packet received after connect {:?}",
             pck
-        )),
-        Err(err) => Err(format!("Error decoding connack packet {:?}", err)),
+        ))),
+        Err(err) => Err(crate::error::IoTHubError::Other(format!(
+            "Error decoding connack packet {:?}",
+            err
+        ))),
     }?;
 
     Ok(socket)
@@ -199,8 +205,7 @@ impl MqttTransport {
         hub_name: &str,
         device_id: String,
         token_source: TokenProvider,
-    ) -> crate::Result<Self>
-    {
+    ) -> crate::Result<Self> {
         let user_name = format!("{}/{}/?api-version=2018-06-30", hub_name, device_id);
 
         let expiry = Utc::now() + Duration::days(1);
