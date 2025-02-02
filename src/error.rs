@@ -9,4 +9,7 @@ pub enum IoTHubError {
     TlsError(#[from] native_tls::Error),
     #[error("{0}")]
     Other(String),
+    #[cfg(feature = "https-transport")]
+    #[error("{0}")]
+    HttpError(#[from] reqwest::Error),
 }
