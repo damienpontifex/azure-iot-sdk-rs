@@ -99,6 +99,9 @@ async fn main() -> anyhow::Result<()> {
                     MessageType::DesiredPropertyUpdate(msg) => {
                         info!("Desired properties updated {:?}", msg)
                     }
+                    MessageType::TwinResponse(msg) => {
+                        info!("Twin response: {:?}", msg)
+                    }
                     MessageType::ErrorReceive(err) => error!("Error during receive {:?}", err),
                 }
             }
