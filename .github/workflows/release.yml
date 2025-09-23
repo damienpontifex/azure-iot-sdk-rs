@@ -11,20 +11,18 @@ jobs:
     environment:
       name: crates.io
       url: https://crates.io/crates/azure_iot_sdk
+    permissions:
+      id-token: write
     steps:
     - name: Checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@v5
 
-    - name: Login to crates.io
-      uses: actions-rs/cargo@v1
-      with:
-        command: login
-        args: ${{ secrets.CARGO_API_TOKEN }}
+    - uses: rust-lang/crates-io-auth-action@v1
+      id: auth
 
-    - name: Publish to crates.io
-      uses: actions-rs/cargo@v1
-      with:
-        command: publish
+    - run: cargo publish
+      env:
+        CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
 
   create-github-release:
     runs-on: ubuntu-latest
