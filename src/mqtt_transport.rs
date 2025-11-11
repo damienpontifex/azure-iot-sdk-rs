@@ -48,7 +48,8 @@ const METHOD_POST_TOPIC_FILTER: &str = "$iothub/methods/POST/#";
 const METHOD_POST_TOPIC_PREFIX: &str = "$iothub/methods/POST/";
 #[cfg(feature = "twin-properties")]
 const TWIN_RESPONSE_TOPIC_FILTER: &str = "$iothub/twin/res/#";
-// const TWIN_RESPONSE_TOPIC_PREFIX: &str = "$iothub/twin/res/";
+#[cfg(feature = "twin-properties")]
+const TWIN_RESPONSE_TOPIC_PREFIX: &str = "$iothub/twin/res/";
 #[cfg(feature = "twin-properties")]
 const TWIN_PATCH_TOPIC_FILTER: &str = "$iothub/twin/PATCH/properties/desired/#";
 #[cfg(feature = "twin-properties")]
@@ -422,6 +423,20 @@ impl Transport for MqttTransport {
                             // Twin update
                             if handler_tx
                                 .send(MessageType::DesiredPropertyUpdate(message))
+                                .await
+                                .is_err()
+                            {
+                                break;
+                            }
+
+                            continue;
+                        }
+
+                        #[cfg(feature = "twin-properties")]
+                        if publ.topic_name().starts_with(TWIN_RESPONSE_TOPIC_PREFIX) {
+                            // Twin update
+                            if handler_tx
+                                .send(MessageType::TwinResponse(message))
                                 .await
                                 .is_err()
                             {
