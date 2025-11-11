@@ -120,6 +120,7 @@ async fn tcp_connect(iot_hub: &str) -> crate::Result<TlsStream<TcpStream>> {
 }
 
 pub(crate) async fn mqtt_connect(
+    buf: &mut Vec<u8>,
     hostname: &str,
     client_identifier: &str,
     username: impl ToString,
@@ -134,9 +135,8 @@ pub(crate) async fn mqtt_connect(
     conn.set_user_name(Some(username.to_string()));
     conn.set_password(Some(password.to_string()));
 
-    let mut buf = Vec::new();
-    conn.encode(&mut buf).unwrap();
-    socket.write_all(&buf[..]).await?;
+    conn.encode(buf).unwrap();
+    socket.write_all(buf).await?;
 
     let packet = VariablePacket::parse(&mut socket).await;
 
@@ -187,6 +187,7 @@ pub(crate) struct MqttTransport {
     rx_topic_prefix: String,
     ping_join_handle: Option<Arc<JoinHandle<()>>>,
     // rx_loop_handle: Option<AbortHandle>,
+    buf: Vec<u8>,
 }
 
 impl Drop for MqttTransport {
@@ -213,7 +214,8 @@ impl MqttTransport {
         let token = token_source.get(&expiry);
         trace!("Using token {}", token);
 
-        let socket = mqtt_connect(&hub_name, &device_id, user_name, token).await?;
+        let mut buf = Vec::new();
+        let socket = mqtt_connect(&mut buf, &hub_name, &device_id, user_name, token).await?;
 
         let (read_socket, write_socket) = tokio::io::split(socket);
 
@@ -227,6 +229,7 @@ impl MqttTransport {
             rx_topic_prefix: device_bound_messages_topic_prefix(&device_id),
             ping_join_handle: None,
             // rx_loop_handle: None,
+            buf,
         };
 
         mqtt_transport.ping_join_handle = Some(Arc::new(mqtt_transport.ping_on_secs_interval(8)));
@@ -255,13 +258,13 @@ impl Transport for MqttTransport {
         trace!("Sending message {:?} to topic {:?}", message, full_topic);
         let publish_packet =
             PublishPacket::new(full_topic, QoSWithPacketIdentifier::Level0, message.body);
-        let mut buf = Vec::new();
-        publish_packet.encode(&mut buf).unwrap();
+        self.buf.clear();
+        publish_packet.encode(&mut self.buf).unwrap();
 
         self.write_socket
             .lock()
             .await
-            .write_all(&buf[..])
+            .write_all(&self.buf)
             .await
             .map_err(|e| e.into())
     }
@@ -274,12 +277,12 @@ impl Transport for MqttTransport {
             QoSWithPacketIdentifier::Level0,
             body.as_bytes(),
         );
-        let mut buf = vec![];
-        packet.encode(&mut buf).unwrap();
+        self.buf.clear();
+        packet.encode(&mut self.buf).unwrap();
         self.write_socket
             .lock()
             .await
-            .write_all(&buf[..])
+            .write_all(&self.buf)
             .await
             .map_err(|e| e.into())
     }
@@ -295,12 +298,12 @@ impl Transport for MqttTransport {
             QoSWithPacketIdentifier::Level0,
             "".as_bytes(),
         );
-        let mut buf = vec![];
-        packet.encode(&mut buf).unwrap();
+        self.buf.clear();
+        packet.encode(&mut self.buf).unwrap();
         self.write_socket
             .lock()
             .await
-            .write_all(&buf[..])
+            .write_all(&self.buf)
             .await
             .map_err(|e| e.into())
     }
@@ -320,12 +323,12 @@ impl Transport for MqttTransport {
             QoSWithPacketIdentifier::Level0,
             response.body,
         );
-        let mut buf = Vec::new();
-        publish_packet.encode(&mut buf).unwrap();
+        self.buf.clear();
+        publish_packet.encode(&mut self.buf).unwrap();
         self.write_socket
             .lock()
             .await
-            .write_all(&buf[..])
+            .write_all(&self.buf)
             .await
             .map_err(|e| e.into())
     }
@@ -335,12 +338,12 @@ impl Transport for MqttTransport {
 
         let pingreq_packet = PingreqPacket::new();
 
-        let mut buf = Vec::new();
-        pingreq_packet.encode(&mut buf).unwrap();
+        self.buf.clear();
+        pingreq_packet.encode(&mut self.buf).unwrap();
         self.write_socket
             .lock()
             .await
-            .write_all(&buf)
+            .write_all(&self.buf)
             .await
             .map_err(|e| e.into())
     }
@@ -516,12 +519,12 @@ impl MqttTransport {
         trace!("Subscribing to {:?}", topics);
 
         let subscribe_packet = SubscribePacket::new(10, topics);
-        let mut buf = Vec::new();
-        subscribe_packet.encode(&mut buf).unwrap();
+        self.buf.clear();
+        subscribe_packet.encode(&mut self.buf).unwrap();
         self.write_socket
             .lock()
             .await
-            .write_all(&buf[..])
+            .write_all(&self.buf)
             .await
             .unwrap();
     }
@@ -541,10 +544,10 @@ impl MqttTransport {
         trace!("Unsubscribing to {:?}", topics);
 
         let unsubscribe_packet = UnsubscribePacket::new(10, topics);
-        let mut buf = Vec::new();
-        unsubscribe_packet.encode(&mut buf).unwrap();
+        self.buf.clear();
+        unsubscribe_packet.encode(&mut self.buf).unwrap();
         // If the connection is lost, do not unwrap.
-        let _ = self.write_socket.lock().await.write_all(&buf[..]).await;
+        let _ = self.write_socket.lock().await.write_all(&self.buf).await;
     }
 }
 
